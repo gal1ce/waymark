@@ -1,0 +1,13 @@
+.env
+backend/data/*.db*
+backend/data/backups/
+backend/data/notes/
+backend/data/coach/
+backend/data/me/
+backend/data/*.clock.json
+backend/.venv/
+backend/.pytest_cache/
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+packages/

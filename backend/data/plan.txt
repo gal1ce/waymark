@@ -1,0 +1,292 @@
+Gerçek Beceri + CTU Planı — Birleşik Takvim
+
+
+
+
+  Gerçek Beceri + CTU Planı — Birleşik
+  Takvim
+    Nov 20, 2026         ·   ​@enes
+
+
+
+
+  Genel bakış
+  Hedef: Eylül 2029'a kadar LinkedIn profilindeki C++/sistem, ML/NLP ve
+  matematik/istatistik iddialarını gerçek beceriye çevirmek ve aynı yolda CTU FIT'e girip ilk
+  yılı geçecek seviyeye gelmek. İki hedef büyük ölçüde aynı işi istiyor: 18.06 = BIE-LA1, Stat
+  110 + Book of Proof = BIE-DML, C veri yapıları = BIE-PA1.
+
+
+     Alan                                     Bugün                        Hedef
+
+     Web / backend                            Gerçek (Sovel, FastAPI,      Korumak, yeni şey eklememek
+                                              React)
+
+     C++ / sistem                             Profilde var, kendi başına   Kintsugi ve Indium'u AI'sız baştan
+                                              yapamıyor                    yazabilmek
+
+     ML / NLP                                 Profilde var, kendi başına   News classifier'ı sıfırdan eğitmek,
+                                              yapamıyor                    CS229/231n/224N ödevleri
+
+     Matematik /                              Profilde var, kendi başına   18.06, Stat 110, SCIO'da 30'da net 21+
+     istatistik                               yapamıyor
+
+     CTU (SCIO, IELTS,                        Başlanmadı                   Ocak 2029 başvuru, Eylül 2029 Prag
+     belgeler)
+
+
+  Zaman bütçesi: Haziran 2027'ye kadar haftada 30 saat. Temmuz 2027'de tam zamanlı iş
+  başlayınca haftada 15–20 saate düşeceği varsayıldı; Faz 2 ve 3 bu yüzden daha uzun.
+
+
+  Kurallar
+  Bu üç kural olmadan plan yine LARP'a döner.
+
+     1. Gerçek sayılma kriteri. Bir kurs, problem setlerini kendin çözüp public bir repoya
+         koyduğunda biter; videoları izlemek sayılmaz. Bir proje, AI'sız baştan anlatabildiğinde
+         ya da yeniden yazabildiğinde gerçektir.
+
+
+
+
+                                                                                                                 Page 1 of 6
+Gerçek Beceri + CTU Planı — Birleşik Takvim
+
+
+
+
+     2. AI kullanımı. Öğrenme projelerinde kodu AI yazmaz. Takılınca önce 30 dakika kendin
+        dene, sonra AI'a kodu değil kavramı sor. Web/backend gibi zaten bildiğin alanda AI
+         serbest.
+     3. Haftalık kontrol. Her pazar 15 dakika: bu hafta kaç saat, neyi bitirdin, takvimde ne
+         gecikti. Bir ay üst üste gecikirse planı kısalt, çalışma saatini şişirme.
+
+  Bir kurs ya da proje gerçeğe dönüşünce aşağıdaki takip tablosunda durumunu değiştir.
+
+
+  Fazlar
+  ML'e doğrudan başlanmıyor: CS229 lineer cebir ve olasılık istiyor, bu yüzden Faz 1
+  matematik ve C, Faz 3 ML.
+
+
+
+
+  üç faz × dört alan, Aralık 2026 – Eylül 2029
+
+  Her sütun bir faz, her satır bir alan; vurgulu kutu CTU başvurusunun kendisi.
+
+  Faz 1'de haftalık 30 saatin dağılımı:
+
+
+     Alan                            Saat/hafta   İçerik
+
+     Matematik                       12           SCIO eksikleri, Book of Proof, 18.06
+
+     C                               8            Kochan, PA1 tarzı veri yapıları, Kattis
+
+
+
+
+                                                                                               Page 2 of 6
+Gerçek Beceri + CTU Planı — Birleşik Takvim
+
+
+
+
+     Alan                            Saat/hafta   İçerik
+
+     Kendi projelerin                6            Kintsugi'yi anlamak ve AI'sız yeniden yazmak
+
+     İngilizce                       4            Kaynakları İngilizce çalışmak, haftada 1 essay
+
+
+  Faz 2 ve 3'te aynı oran korunur, toplam 15–20 saate iner.
+
+
+  Ay ay takvim
+  Her ayın kontrol noktaları bitince işaretle. [CTU] etiketli maddeler CTU FIT Hazırlık
+  Planı'ndan geliyor.
+
+
+  Aralık 2026
+         [CTU] SCIO 2025 sınavını 90 dakika süreli çöz, net puanı yaz (doğru − yanlış/3)
+         Yanlış yaptığın konuları işaretle, Khan Academy'den (İngilizce) o konulara başla
+         Kochan, Programming in C: ilk 8 bölüm
+         Kintsugi'nin kodunu oku, her dosya için bir paragraf açıklama yaz
+
+
+  Ocak – Şubat 2027
+         Book of Proof: bölüm 1–5, alıştırmalar yazılı
+         MIT 18.06: ilk 12 ders + problem setleri, çözümler repoda
+         C: dinamik dizi, bağlı liste, stack, queue sıfırdan; ASan ve valgrind temiz
+         Kintsugi yeniden yazım: page I/O + buffer pool (AI'sız)
+
+
+  Mart – Mayıs 2027
+         [CTU] SCIO denemesi #2, puanı Aralık'la karşılaştır
+         C: ikili arama ağacı, MergeSort, QuickSort; Kattis'te C ile 30 soru
+         18.06 bitti (tüm problem setleri) → profilde gerçek
+         Kintsugi yeniden yazım: B+tree + WAL bitti → profilde gerçek
+         Book of Proof: bölüm 6–10 (olmayana ergi, tümevarım)
+
+
+  Haziran 2027
+         [CTU] Lise mezuniyeti; diploma ve transkripte apostil
+         [CTU] SCIO denemesi #3
+
+
+                                                                                                   Page 3 of 6
+Gerçek Beceri + CTU Planı — Birleşik Takvim
+
+
+
+
+         Stat 110'a başla
+
+
+  Temmuz – Aralık 2027 (iş başlıyor, haftada 15–20 saat)
+         [CTU] Yazılım işi, ayda €500 birikim
+         Stat 110 bitti (problem setleri repoda) → profilde gerçek
+         MIT 6.006: algoritmaları C++ ile uygula, ilk yarı
+         Indium: fizik (SAT + impulse) ve ECS'i AI'sız yeniden yaz → profilde gerçek
+         [CTU] Aralık: C ile tüm veri yapıları yazılmış, valgrind temiz
+         SCIO denemesi her 2 ayda bir
+
+
+  Ocak – Haziran 2028
+         6.006 bitti → profilde gerçek
+         Stanford CS229: problem setleri NumPy ile, repoda → profilde gerçek
+         [CTU] Book of Proof tamamen bitti
+         [CTU] SCIO denemelerinde 30'da net 21+
+         IELTS: haftada 2 Task 2 essay başlıyor
+
+
+  Temmuz – Aralık 2028
+         CS224N ya da CS231n (biri), ödevleriyle
+         Turkish News Classifier'ı sıfırdan eğit, eğitim döngüsünü kendin yaz → profilde gerçek
+         Cambridge IELTS deneme kitapları, süreli
+         [CTU] Ekim: IELTS 6.5
+         [CTU] Kasım: 2029 kabul şartlarını kontrol et, birikim €8.000'i geçmiş
+         [CTU] Aralık: haftada bir tam SCIO denemesi
+
+
+  Ocak – Mayıs 2029
+         [CTU] Ocak: online başvuru, SCIO kaydı, lise denklik başvurusu
+         [CTU] Ocak–Nisan: SCIO sınavı (kötü geçerse sonraki tarih)
+         CS224N / CS231n'in diğeri
+         [CTU] Mayıs: sonuç; vize reddinde iadeyi FIT'e yazılı sor
+
+
+
+
+                                                                                          Page 4 of 6
+Gerçek Beceri + CTU Planı — Birleşik Takvim
+
+
+
+
+  Haziran – Eylül 2029
+         [CTU] Haziran: adli sicil ve banka dökümünü şimdi al (güncellik şartı), vize randevusu,
+         kayıt, ilk dönem ödemesi
+         BIE-MA1 hazırlık: MIT 18.01, limit ve türev
+         [CTU] Eylül: Prag
+
+  CTU'ya kadar sığmayanlar: 6.172, CS285, CS336. Bunlar profilde "devam ediyor" olarak kalır,
+  Prag'da ilk yıldan sonra ele alınır.
+
+
+
+  Profil takip tablosu
+  Profildeki her kalem, gerçek sayılacağı ay ve kanıtıyla. Bir şey bittiğinde Durum'u değiştir,
+  Kanıt sütununa repo linkini koy.
+
+
+     Kalem                                    Tür      Hedef ay         Durum        Kanıt
+
+     MIT 18.06 Linear Algebra                 Kurs     Mayıs 2027        ​ LARP
+
+     Kintsugi (yeniden yazım)                 Proje    Mayıs 2027        ​ LARP
+
+     Stat 110 Probability                     Kurs     Aralık 2027       ​ LARP
+
+     Indium fizik + ECS                       Proje    Aralık 2027       ​ LARP
+
+     MIT 6.006 Algorithms                     Kurs     Haziran 2028      ​ LARP
+
+     Stanford CS229                           Kurs     Haziran 2028      ​ LARP
+
+     CS224N veya CS231n (ilki)                Kurs     Aralık 2028       ​ LARP
+
+     Turkish News Classifier (sıfırdan)       Proje    Aralık 2028       ​ LARP
+
+     CS224N veya CS231n (ikincisi)            Kurs     Mayıs 2029        ​ LARP
+
+     MIT 6.172                                Kurs     CTU sonrası       ​ LARP
+
+     CS285 Deep RL                            Kurs     CTU sonrası       ​ LARP
+
+     CS336 LM from Scratch                    Kurs     CTU sonrası       ​ LARP
+
+     MIT 18.S096                              Kurs     CTU sonrası       ​ LARP
+
+
+
+
+                                                                                             Page 5 of 6
+Gerçek Beceri + CTU Planı — Birleşik Takvim
+
+
+
+
+     Kalem                                           Tür        Hedef ay            Durum         Kanıt
+
+     Skill: Statistics, Hypothesis                   Skill      Aralık 2027 (Stat    ​ LARP
+     Testing, Probability                                       110 ile)
+
+     Skill: PyTorch, Deep Learning,                  Skill      Aralık 2028          ​ LARP
+     NLP
+
+     Sovel                                           Proje      —                    ​ Gerçek     sovel.app
+
+     Cambridge Battlecode 2026                       Yarışma    —                    ​ Gerçek     Final
+                                                                                                  #12/831
+
+
+
+
+  Kaynaklar
+
+     Alan                                     Kaynak                                            Ücret
+
+     SCIO / lise matematiği                   SCIO 2025 sınavı, Khan Academy (İngilizce),       Kitaplar
+                                              AoPS Intro kitapları                              ücretli
+
+     İspat                                    Book of Proof, Richard Hammack                    Ücretsiz
+
+     Lineer cebir                             MIT 18.06, 3Blue1Brown Essence of Linear          Ücretsiz
+                                              Algebra
+
+     Olasılık                                 Stat 110, Blitzstein & Hwang kitabı               Ücretsiz
+
+     C                                        Kochan, Programming in C; Kattis                  Kitap ücretli
+
+     Algoritmalar                             MIT 6.006                                         Ücretsiz
+
+     Veritabanı iç yapısı                     CMU 15-445 Database Systems dersleri              Ücretsiz
+     (Kintsugi)
+
+     ML                                       CS229, CS224N, CS231n                             Ücretsiz
+
+     Analiz (BIE-MA1)                         MIT 18.01SC                                       Ücretsiz
+
+     IELTS                                    Cambridge IELTS deneme kitapları                  Sınav ücretli
+
+
+  Linkler hafızadan yazıldı, açıp kontrol edilmedi. CMU 15-445, Kintsugi'yi yeniden yazarken
+  buffer pool, B+tree ve WAL'ı anlamak için plana eklendi.
+
+
+
+
+                                                                                                            Page 6 of 6
+
