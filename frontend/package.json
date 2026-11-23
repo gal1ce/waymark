@@ -12,6 +12,7 @@
   "dependencies": {
     "katex": "0.19.1",
     "lucide-react": "^1.77.0",
+    "onnxruntime-web": "1.30.0",
     "perfect-freehand": "^1.2.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

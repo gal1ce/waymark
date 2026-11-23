@@ -13,6 +13,8 @@ fi
 rm -rf "$D" && mkdir -p "$D"
 cp -r "${CTU_STUDY_REPO_SRC:-$HOME/quaimlres_road}" "$D/repo"
 cp "${CTU_COACH_MD_SRC:-$HOME/Custom/Projects/ctu-plan/COACH.md}" "$D/COACH.md"
+# AI keys: a copy of .env, so keys added or removed in the demo never change the real file
+if [ -f .env ]; then cp .env "$D/app.env"; chmod 600 "$D/app.env"; fi
 echo "Demo folder: $D  →  http://localhost:$PORT"
-CTU_STUDY_REPO="$D/repo" CTU_COACH_MD="$D/COACH.md" CTU_DB="$D/ctu.db" \
+CTU_STUDY_REPO="$D/repo" CTU_COACH_MD="$D/COACH.md" CTU_DB="$D/ctu.db" CTU_ENV_FILE="$D/app.env" \
 CTU_NOW="${1:-2026-11-23T10:05}" PORT="$PORT" exec ./run.sh

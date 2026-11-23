@@ -127,7 +127,10 @@ class _Live:
             self.d["phase"] = "writing"
             self.log(f"Asking {val} to write the questions")
         elif kind == "switch":
-            self.log(f"{val[0]} is out of free quota, switching to {val[1]}", "warn")
+            self.log(f"{val[0]} didn't answer, trying {val[1]}", "warn")
+        elif kind == "restart":
+            self.log(val, "warn")
+            self.reset_text()
         elif kind == "text":
             if not self.text:
                 self.log("First words arrived, writing")

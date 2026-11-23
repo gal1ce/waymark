@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Clock } from 'lucide-react'
+import { Clock, GripHorizontal, PanelRightClose } from 'lucide-react'
 import { api, type DocBlock } from './api'
 import { t as tr } from './i18n'
+import { useDrag } from './drag'
 
 /* Watching a Khan video: its speed (Firefox's own controls have no speed menu) and a notes column beside it. */
 
@@ -45,6 +46,10 @@ export function VideoNotes({ title, video }: { title: string; video: RefObject<H
   const [page, setPage] = useState<number | null>(null)
   const [state, setState] = useState<'loading' | 'idle' | 'saving' | 'saved' | 'error'>('loading')
   const ta = useRef<HTMLTextAreaElement>(null)
+  const box = useRef<HTMLElement>(null)
+  // dragged by its head it floats over the page (the video then takes the whole width); "Dock" puts it back beside it
+  const drag = useDrag('ctu.video.notes.pos')
+  const floating = drag.pos != null
   const timer = useRef<number | undefined>(undefined)
   const latest = useRef({ text, page })
   latest.current = { text, page }
@@ -92,11 +97,14 @@ export function VideoNotes({ title, video }: { title: string; video: RefObject<H
   }
 
   return (
-    <aside className={'vid-notes' + (state === 'error' ? ' bad' : '')} aria-label={tr('Video notes')}>
-      <div className="vid-notes-h">
+    <aside ref={box} className={'vid-notes' + (floating ? ' float' : '') + (state === 'error' ? ' bad' : '')} aria-label={tr('Video notes')}
+      style={floating ? { left: drag.pos!.x, top: drag.pos!.y, maxHeight: `calc(100vh - ${drag.pos!.y + 8}px)` } : undefined}>
+      <div className="vid-notes-h" onPointerDown={(e) => drag.start(e, box.current)} title={floating ? undefined : tr('Drag to move the notes over the video')}>
+        <GripHorizontal size={14} strokeWidth={1.6} className="calc-grip" aria-hidden />
         <b>{tr('Notes')}</b>
         <span className="vid-notes-st">{state === 'saving' ? tr('Saving…') : state === 'saved' ? tr('Saved to the Notebook') : state === 'error' ? tr('Not saved') : ''}</span>
         <button className="btn ghost sm" onClick={stamp} title={tr('Insert the video time')}><Clock size={13} strokeWidth={1.6} />{tr('Time')}</button>
+        {floating && <button className="icon-btn sm" onClick={drag.reset} aria-label={tr('Dock beside the video')} title={tr('Dock beside the video')}><PanelRightClose size={15} strokeWidth={1.6} /></button>}
       </div>
       <textarea ref={ta} className="vid-notes-ta" value={text} disabled={state === 'loading'} onChange={(e) => change(e.target.value)}
         placeholder={tr('Type while you watch. Markdown and $maths$ work; it is kept in the Notebook.')} />

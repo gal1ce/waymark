@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useDrag } from './drag'
 import Markdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkMath from 'remark-math'
 import {
-  ArrowUp, Check, Copy, History, ImageUp, PanelRightOpen, PenLine, Pencil, Plus, RotateCcw, Settings2, ShieldCheck, Square, Trash2, X,
+  ArrowUp, Check, Copy, History, ImageUp, Lock, PanelRightOpen, PenLine, Pencil, Plus, RotateCcw, Settings2, ShieldCheck, Square, Trash2, X,
 } from 'lucide-react'
 import { api, ApiError, fmtDate, streamChat, type ChatBody, type ChatMsg, type CoachSettings, type Convo, type Effort, type ReplyLanguage, type GenLive, type StreamEv, type Task } from './api'
 import type { Ctx } from './App'
@@ -13,7 +14,7 @@ import { MD_CODE } from './codefmt'
 import { squareAvatar } from './picture'
 import { t as tr, tx, type Key } from './i18n'
 import { Scrollbar } from './Scrollbar'
-import { Select, Slider } from './controls'
+import { Slider } from './controls'
 
 // ------------------------------------------------------------------ active conversation (per day, per browser)
 const CONVO_KEY = 'ctu.convo'
@@ -219,7 +220,7 @@ function RuleLine({ current, locked, short, ctx }: { current: Task | null; locke
     <div className="rule">
       <ShieldCheck size={14} strokeWidth={1.5} />
       <span>
-        {locked ? <>{tr('Test in progress: closed book, coach off')}</> : <>
+        {locked ? <>{tr('Test in progress: closed book. Ask from the test for a rule or formula')}</> : <>
           {tr("The coach doesn't write exercise solutions or code.")}{' '}
           {current
             ? hintLeft ? tr('Right now it asks guiding questions and points you to the source; concept explanations open in {n} min.', { n: hintLeft }) : tr('Concept explanations are open for this task')
@@ -340,16 +341,16 @@ function AvatarField({ ctx }: { ctx: Ctx }) {
 
 export function CoachSettingsView({ ctx }: { ctx: Ctx }) {
   const [s, setS] = useState<CoachSettings | null>(null)
-  const [form, setForm] = useState<{ name: string; personality: string; verbosity: number; effort: Effort; model: string; language: ReplyLanguage }>({ name: '', personality: '', verbosity: 2, effort: 'low', model: '', language: 'auto' })
+  const [form, setForm] = useState<{ name: string; personality: string; verbosity: number; effort: Effort; language: ReplyLanguage }>({ name: '', personality: '', verbosity: 2, effort: 'low', language: 'auto' })
   const [note, setNote] = useState('')
   const [edit, setEdit] = useState<{ id: number; text: string } | null>(null)
   const [saved, setSaved] = useState(false)
-  const load = useCallback((x: CoachSettings) => { setS(x); setForm({ name: x.name, personality: x.personality, verbosity: x.verbosity, effort: x.effort, model: x.model in x.model_options ? x.model : '', language: x.language }) }, [])
+  const load = useCallback((x: CoachSettings) => { setS(x); setForm({ name: x.name, personality: x.personality, verbosity: x.verbosity, effort: x.effort, language: x.language }) }, [])
   useEffect(() => { api.coach().then(load).catch(() => {}) }, [load])
   if (!s) return <div className="settings" />
-  const dirty = form.name !== s.name || form.personality !== s.personality || form.verbosity !== s.verbosity || form.effort !== s.effort || form.language !== s.language || form.model !== (s.model in s.model_options ? s.model : '')
+  const dirty = form.name !== s.name || form.personality !== s.personality || form.verbosity !== s.verbosity || form.effort !== s.effort || form.language !== s.language
   const save = async () => {
-    const x = await ctx.run(api.saveCoach(form))
+    const x = await ctx.run(api.saveCoach({ ...form, model: '' }))
     if (x) { load(x); setSaved(true); setTimeout(() => setSaved(false), 1500); ctx.refresh() }
   }
   const memo = async (p: Promise<CoachSettings>) => { const x = await ctx.run(p); if (x) setS(x); return x }
@@ -388,10 +389,10 @@ export function CoachSettingsView({ ctx }: { ctx: Ctx }) {
         <div className="field-h">{s.effort_labels[form.effort]}</div>
       </div>
       <div className="field">
-        <span className="field-l">{tr('Model')} <span className="t3">· {s.provider === 'free' ? tr('free Gemini mode') : 'Claude'}</span></span>
-        <Select label={tr('Model')} value={form.model} onChange={(v) => setForm({ ...form, model: v })}
-          options={[{ value: '', label: `Default (${s.model_default})`, text: 'Default' }, ...Object.keys(s.model_options).map((m) => ({ value: m, label: m, hint: s.model_options[m] }))]} />
-        <span className="field-h">{s.model_options[form.model || s.model_default]} {tr('Only the coach chat uses this; tests and planning keep their own model')}</span>
+        <span className="field-l">{tr('Model')}</span>
+        <span className="mono small">{s.provider ? `${s.provider} · ${s.model_active || tr('no model chosen')}` : tr('No AI provider is set up')}</span>
+        <span className="field-h">{tr('Each provider has its own coach model; choose it under AI providers.')}{' '}
+          <a href="#/settings" onClick={(e) => { e.preventDefault(); document.getElementById('set-key')?.scrollIntoView({ block: 'start' }) }}>{tr('AI providers')}</a></span>
       </div>
       <label className="field">
         <span className="field-l">{tr('Personality')}</span>
@@ -603,7 +604,7 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose }: { ctx: Ctx
                     </button>
                   ))}
                 </div>
-              </> : <p className="ch-n">{locked ? tr('A test is in progress: closed book, the coach is off until you submit.') : tr('The agent is off. Add ANTHROPIC_API_KEY to ctu-app/.env and restart the server.')}</p>}
+              </> : <p className="ch-n">{locked ? tr('A test is in progress: the panel is off until you submit. Ask from the test with the Ask button: rules, formulas and words, not answers.') : tr('The agent is off. Add ANTHROPIC_API_KEY to ctu-app/.env and restart the server.')}</p>}
             </div>
           )}
           {conv && conv.date !== today && !fresh && <div className="convo-old t3">{tr('From {date}. Messages you send now use today\'s status', { date: fmtDate(conv.date) })}</div>}
@@ -648,8 +649,10 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose }: { ctx: Ctx
 
 /** Small floating chat opened from the right-click menu, quoting what was clicked. Follow-ups stay in the same
  *  conversation; "Open in panel" continues it with the full history. */
-export function AskPopup({ at, ctx, page, current, hasKey, onClose, onOpenPanel }: {
+export function AskPopup({ at, ctx, page, current, hasKey, exam = false, onClose, onOpenPanel }: {
   at: { x: number; y: number; context: string }; ctx: Ctx; page: string; current: Task | null; hasKey: boolean
+  /** a graded test is open: closed book, in a conversation of its own that the panel doesn't open */
+  exam?: boolean
   onClose: () => void; onOpenPanel: () => void
 }) {
   const name = ctx.meta?.coach_name || 'Coach'
@@ -661,6 +664,8 @@ export function AskPopup({ at, ctx, page, current, hasKey, onClose, onOpenPanel 
   const box = useRef<HTMLDivElement>(null)
   const body = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ left: at.x, top: at.y })
+  const drag = useDrag()        // moved by its head, out of the way of the question; stays where it was put
+  const ax = drag.pos?.x ?? at.x, ay = drag.pos?.y ?? at.y
   const input = useRef<HTMLTextAreaElement>(null)
   const busy = draft != null
   const context = at.context.trim()
@@ -673,7 +678,7 @@ export function AskPopup({ at, ctx, page, current, hasKey, onClose, onOpenPanel 
     if (!el) return
     const place = () => {
       const w = el.offsetWidth || 420, h = el.offsetHeight || 240
-      const left = Math.max(16, Math.min(at.x, window.innerWidth - w - 16)), top = Math.max(16, Math.min(at.y, window.innerHeight - h - 16))
+      const left = Math.max(16, Math.min(ax, window.innerWidth - w - 16)), top = Math.max(16, Math.min(ay, window.innerHeight - h - 16))
       setPos((p) => (p.left === left && p.top === top ? p : { left, top }))
     }
     place()
@@ -681,7 +686,7 @@ export function AskPopup({ at, ctx, page, current, hasKey, onClose, onOpenPanel 
     ro.observe(el)
     window.addEventListener('resize', place)
     return () => { ro.disconnect(); window.removeEventListener('resize', place) }
-  }, [at.x, at.y])
+  }, [ax, ay])
   useEffect(() => { body.current?.scrollTo({ top: body.current.scrollHeight }) }, [ex.length, draft?.text, draft?.phase])
   useEffect(() => { if (!busy) input.current?.focus() }, [busy])
   // closing the popup doesn't cancel: the reply still lands in the conversation
@@ -689,18 +694,19 @@ export function AskPopup({ at, ctx, page, current, hasKey, onClose, onOpenPanel 
   const send = async () => {
     if (busy || !hasKey) return
     const typed = q.trim()
-    const blank = !typed && first && !!context  // empty question about a quote: "explain this"
+    const blank = !typed && first && !!context && !exam  // empty question about a quote: "explain this" (not in a test)
     if (!typed && !blank) return
     const question = typed || 'Explain this'
     const quote = first && context ? context.slice(0, 600).split('\n').map((l) => `> ${l}`).join('\n') + '\n\n' : ''
     // the app's own lines are in [brackets] so the server's language detection ignores them
     const text = (first ? `[from the ${page} page]\n` : '') + quote + (blank ? '[no question typed: explain the quoted part]' : typed)
     setEx((x) => [...x, { q: question, a: null }]); setQ('')
-    const r = await run({ text, convo_id: convo ?? storedConvo(ctx.meta?.today) }, null, (id) => { setConvo(id); storeConvo(ctx.meta?.today, id) })
+    const keep = (id: number) => { setConvo(id); if (!exam) storeConvo(ctx.meta?.today, id) }
+    const r = await run(exam ? { text, convo_id: convo, new: convo == null, exam } : { text, convo_id: convo ?? storedConvo(ctx.meta?.today) }, null, keep)
     endTurn()
     if (r) {
       setEx((x) => x.map((e, i) => (i === x.length - 1 ? { ...e, a: r.reply } : e)))
-      setConvo(r.convo_id); storeConvo(ctx.meta?.today, r.convo_id)
+      keep(r.convo_id)
     } else {  // failed or stopped before a reply: give the question back instead of leaving it unanswered
       setEx((x) => x.slice(0, -1)); setQ(typed)
     }
@@ -709,18 +715,32 @@ export function AskPopup({ at, ctx, page, current, hasKey, onClose, onOpenPanel 
   const toPanel = () => { if (convo) showConvo(ctx.meta?.today, convo); onOpenPanel() }
   const placeholder = !hasKey ? tr('The coach is off: it needs an API key (Settings)')
     : !first ? tr('Ask a follow-up')
-    : context ? tr('What is unclear here? Leave empty to get it explained') : tr('What do you want to ask {name}?', { name })
+    : exam ? tr('Which rule, formula or word do you need?')
+    : context ? tr('Ask, or press Enter to explain this') : tr('What do you want to ask {name}?', { name })
+  const closedWhy = tr('Graded test: rules, formulas and words, never the answer to this question')
 
   return (
-    <div className="ask" ref={box} role="dialog" aria-label={`Ask ${name}`} style={{ ...pos, transformOrigin: `${at.x - pos.left}px ${at.y - pos.top}px` }}>
-      <div className="ask-head">
-        <span className="ask-title">Ask {name}</span>
-        {page && <span className="ask-page">{page}</span>}
-        <button className="btn ghost sm ask-panel" onClick={toPanel} title={tr('Continue this in the coach panel')}><PanelRightOpen size={14} strokeWidth={1.5} />{tr('Open in panel')}</button>
-        <button className="icon-btn" onClick={onClose} aria-label={tr('Close')} title={`${tr('Close')}  Esc`}><X size={15} strokeWidth={1.5} /></button>
+    <div className={'ask' + (exam ? ' closed' : '')} ref={box} role="dialog" aria-label={`Ask ${name}`} style={{ ...pos, transformOrigin: `${at.x - pos.left}px ${at.y - pos.top}px` }}>
+      {/* the head is the handle: who answers, from where, and in a test that it's closed book */}
+      <div className="ask-head" onPointerDown={(e) => drag.start(e, box.current)}>
+        <CoachAvatar ctx={ctx} size="sm" busy={busy} />
+        <div className="ask-id">
+          <span className="ask-title">{name}</span>
+          {page && <span className="ask-page">{page}</span>}
+        </div>
+        {exam && <span className="ask-badge" title={closedWhy}><Lock size={11} strokeWidth={2} />{tr('Closed book')}</span>}
+        <span className="ask-acts">
+          {!exam && <button className="icon-btn sm" onClick={toPanel} aria-label={tr('Open in panel')} title={tr('Continue this in the coach panel')}><PanelRightOpen size={15} strokeWidth={1.5} /></button>}
+          <button className="icon-btn sm" onClick={onClose} aria-label={tr('Close')} title={`${tr('Close')}  Esc`}><X size={15} strokeWidth={1.5} /></button>
+        </span>
       </div>
       <div className="ask-body" ref={body}>
-        {context && <blockquote className="ask-quote" title={context.length > 280 ? context.slice(0, 600) : undefined}>{context}</blockquote>}
+        {context && (
+          <div className="ask-quote" title={context.length > 280 ? context.slice(0, 600) : undefined}>
+            <Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{fixMathInMd(context)}</Markdown>
+          </div>
+        )}
+        {exam && first && !draft && <p className="ask-note">{tr('Ask for a rule, a formula, a definition or what a word means. {name} won’t solve this question or check your answer.', { name })}</p>}
         {ex.map((e, i) => (
           <div key={i} className="ask-ex">
             <div className="msg user">{e.q}</div>
@@ -729,15 +749,15 @@ export function AskPopup({ at, ctx, page, current, hasKey, onClose, onOpenPanel 
         ))}
         {draft && <DraftView draft={draft} name={name} ctx={ctx} />}
       </div>
-      <form className="composer ask-compose" onSubmit={(e) => { e.preventDefault(); if (busy) stop(); else send() }}>
+      <form className="ask-compose" onSubmit={(e) => { e.preventDefault(); if (busy) stop(); else send() }}>
         <textarea ref={input} rows={1} className="ask-input" value={q} disabled={!hasKey || busy} placeholder={placeholder} aria-label={tr('Question for {name}', { name })}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }} />
         {busy
-          ? <button className="btn send" type="submit" aria-label={tr('Stop')} title={tr('Stop')}><Square size={14} strokeWidth={2} /></button>
-          : <button className="btn primary send" type="submit" disabled={!hasKey || (!q.trim() && !(first && context))} aria-label={tr('Ask')}><ArrowUp size={16} strokeWidth={1.75} /></button>}
+          ? <button className="btn send" type="submit" aria-label={tr('Stop')} title={tr('Stop')}><Square size={12} strokeWidth={2.2} /></button>
+          : <button className="btn primary send" type="submit" disabled={!hasKey || (!q.trim() && !(first && context && !exam))} aria-label={tr('Ask')}><ArrowUp size={15} strokeWidth={2} /></button>}
       </form>
-      <RuleLine current={current} short ctx={ctx} />
+      {!exam && <RuleLine current={current} short ctx={ctx} />}
     </div>
   )
 }

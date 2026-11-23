@@ -9,7 +9,7 @@ import type { Ctx } from './App'
 import { busyProps, useBusy, useQuestionFocus } from './interact'
 import { PerseusStatic, PerseusView, Solution } from './Perseus'
 import { bumpXp } from './prefs'
-import { HintPills, Keypad, KeypadIcon, NextArrow, Scratch, ScratchIcon, ScoreRing, SheetFrame, SheetTool, VerdictBar } from './Sheet'
+import { AskTool, HintPills, Keypad, KeypadIcon, NextArrow, Scratch, ScratchIcon, ScoreRing, SheetFrame, SheetTool, VerdictBar } from './Sheet'
 import { t as tr } from './i18n'
 
 /* Khan Academy inside the app: the unit's videos and exercises (Kolibri's copy of the Khan channel),
@@ -72,7 +72,7 @@ export function KhanUnitPanel({ task, ctx, active }: { task: Task; ctx: Ctx; act
   let n = 0
   return (
     <div className="kpanel">
-      {open?.kind === 'video' && <KhanVideoView id={open.id} onBack={back} title={flat.find((i) => i.id === open.id)?.title ?? tr('Video')}
+      {open?.kind === 'video' && <KhanVideoView id={open.id} ctx={ctx} onBack={back} title={flat.find((i) => i.id === open.id)?.title ?? tr('Video')}
         nextUp={(() => { const i = flat.findIndex((x) => x.id === open.id); const nx = flat.slice(i + 1).find((x) => x.ready); return nx ? { title: nx.title, go: () => { setSeen(watched()); openItem(nx) } } : null })()} />}
       {open?.kind === 'exercise' && <KhanPractice id={open.id} onBack={back} ctx={ctx} kolibri={o.status.server ? open.kolibri ?? null : null} partial={!!open.partial} />}
       <div className="unit-top">
@@ -128,7 +128,7 @@ export function KhanUnitPanel({ task, ctx, active }: { task: Task; ctx: Ctx; act
   )
 }
 
-function KhanVideoView({ id, title, onBack, nextUp }: { id: string; title: string; onBack: () => void; nextUp: { title: string; go: () => void } | null }) {
+function KhanVideoView({ id, title, onBack, nextUp, ctx }: { id: string; title: string; onBack: () => void; nextUp: { title: string; go: () => void } | null; ctx: Ctx }) {
   const [v, setV] = useState<KhanVideo | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [pct, setPct] = useState(0)
@@ -141,6 +141,7 @@ function KhanVideoView({ id, title, onBack, nextUp }: { id: string; title: strin
   const setNotes = (x: boolean) => { setNotesS(x); try { localStorage.setItem('ctu.video.notes', x ? 'on' : 'off') } catch { /* only a preference */ } }
   return (
     <SheetFrame title={title} step={tr('Video')} progress={pct} onClose={onBack} closeLabel={tr('Back to the unit')}
+      right={<AskTool ctx={ctx} />}
       bar={ended ? (
         <VerdictBar tone="info" title={tr('Video watched')} action={nextUp ? tr('Next step') : tr('Back to the unit')} onAction={nextUp ? nextUp.go : onBack}>
           {nextUp ? <>{tr('Up next')}: {nextUp.title}</> : tr('That was the last step in this unit.')}
@@ -256,6 +257,7 @@ function KhanPractice({ id, onBack, ctx, kolibri, partial }: { id: string; onBac
         <SheetTool onClick={() => setScratch(true)} label={tr('Scratch paper')} kbd="D"><ScratchIcon /></SheetTool>
         <CalcTool as={(p) => <SheetTool {...p} />} />
         <SheetTool on={pad} onClick={() => setPad((x) => !x)} label={tr('Keypad')}><KeypadIcon /></SheetTool>
+        <AskTool ctx={ctx} />
       </>}
       bar={bar}>
       <div className="sheet-col" ref={col} onKeyDown={(e) => {
@@ -428,7 +430,7 @@ export function KhanTestPage({ id, ctx }: { id: number; ctx: Ctx }) {
   }
   if (review) {
     return (
-      <SheetFrame title={title} step={`${t.score}% · ${tr('review')}`} progress={1} onClose={() => setReview(false)} closeLabel={tr('Back to the result')}>
+      <SheetFrame title={title} step={`${t.score}% · ${tr('review')}`} progress={1} onClose={() => setReview(false)} closeLabel={tr('Back to the result')} right={<AskTool ctx={ctx} />}>
         <div className="sheet-col review" ref={root}>{t.questions.map(question)}</div>
       </SheetFrame>
     )
@@ -440,6 +442,7 @@ export function KhanTestPage({ id, ctx }: { id: number; ctx: Ctx }) {
       right={<>
         <SheetTool onClick={() => setScratch(true)} label={tr('Scratch paper')} kbd="D"><ScratchIcon /></SheetTool>
         <CalcTool as={(p) => <SheetTool {...p} />} />
+        <AskTool ctx={ctx} />
         <span className="sheet-count mono" title={tr('Answered')}>{count}/{n}</span>
       </>}>
       <div className="sheet-col" ref={root}>

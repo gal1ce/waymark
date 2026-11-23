@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { addDays, api, blockTitle, canPeek, fmtDate, fmtDur, fmtMin, toMin, weekday, weekNo, type Block, type CloseItem, type Day, type OutlineBlock, type Stuck, type Task } from './api'
 import type { Ctx } from './App'
+import { beejPage } from './BeejPage'
 import { t as tr, tx } from './i18n'
 import { stuckDetail, stuckSummary } from './stuck'
 import { bumpXp } from './prefs'
@@ -560,6 +561,8 @@ function Resources({ task, ctx, inline }: { task: Task; ctx: Ctx; inline?: boole
   return (
     <div className={'res' + (inline ? ' inline' : '')}>
       {task.resources.map((r, i) => {
+        const bj = r.kind === 'url' ? beejPage(r.href) : null
+        if (bj) return <button key={i} onClick={() => ctx.go({ kind: 'beej', ...bj })}><BookOpen size={13} strokeWidth={1.5} />{r.label}</button>
         if (r.kind === 'url') return <a key={i} href={r.href} target="_blank" rel="noreferrer"><ExternalLink size={13} strokeWidth={1.5} />{r.label}</a>
         if (r.kind === 'kintsugi') return <button key={i} onClick={() => ctx.openReader(r.path!)}><FileCode2 size={13} strokeWidth={1.5} />{r.label}</button>
         if (r.kind === 'ref') return <span key={i} className="res-ref"><BookMarked size={13} strokeWidth={1.5} />{r.label}</span>

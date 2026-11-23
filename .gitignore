@@ -5,9 +5,12 @@ backend/data/notes/
 backend/data/coach/
 backend/data/me/
 backend/data/*.clock.json
+backend/data/beej/
+backend/data/api-key
 backend/.venv/
 backend/.pytest_cache/
 frontend/node_modules/
 frontend/dist/
 __pycache__/
 packages/
+build/

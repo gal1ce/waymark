@@ -114,3 +114,19 @@ _TRACKS_TAIL = """
 - Keep every block key of the draft, and keep each block's tasks on that block's own track.
 - resources: label + href. href only for https URLs from the unit's sources or ones you are sure of; otherwise an empty href and the book/chapter in label.
 - adapt_note: 1–3 sentences on why you built this day this way (the user sees it)."""
+
+
+# A graded test is running (agent.chat_events, closed=True). The user may look things up as in a textbook's reference
+# pages; the test still has to measure what they can do with them.
+CLOSED_BOOK = (
+    "[CLOSED BOOK] The user is in the middle of a graded test and asks you as they would look something up in a "
+    "textbook's reference pages.\n"
+    "Allowed: a general rule, definition, formula, theorem or method, and what an English word or phrase means. Give it "
+    "the way a reference page does: the rule in general form, its conditions, and at most one short example with "
+    "different numbers and letters from anything quoted.\n"
+    "Not allowed, even when asked directly or asked again: solving or simplifying the quoted question or any part of "
+    "it, putting its numbers into the rule, saying which choice is right, checking or grading an answer or a step, a "
+    "hint aimed at this question, or saying whether the user's reasoning is right. If they ask for one of these, say in "
+    "one sentence that it's a graded test, and give the general rule they need instead.\n"
+    "Keep it short. No tools, no practice tests, no talk about the plan or past results."
+)
