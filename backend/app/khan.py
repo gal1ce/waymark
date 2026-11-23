@@ -26,6 +26,7 @@ import sqlite3
 import threading
 import time
 import zipfile
+from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
 
@@ -670,3 +671,81 @@ def summary(ds: str) -> dict:
         except Unavailable:
             names.append(m["exercise_id"][:8])
     return {"questions": len(att), "right": sum(a["correct"] for a in att), "mastered": names}
+
+
+# ------------------------------------------------------------------ coach brief
+def _plain(md: str, limit: int = 260) -> str:
+    """Question text for the coach: widget placeholders and pictures out, one line, short."""
+    s = re.sub(r"\[\[☃ [a-z-]+ \d+\]\]", " ___ ", md or "")
+    s = re.sub(r"!\[[^\]]*\]\([^)]*\)", "[picture]", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s if len(s) <= limit else s[:limit].rstrip() + "…"
+
+
+def _given(item: dict, answers: dict) -> str:
+    """What the user entered, widget by widget, in words (a picked choice as its text, not its index)."""
+    out = []
+    for name, w in perseus.widgets_used(item["question"]).items():
+        t, o = w.get("type"), w.get("options") or {}
+        if t not in perseus.GRADED or w.get("graded") is False:
+            continue
+        a = answers.get(name)
+        if t in ("radio", "dropdown"):
+            ch = o.get("choices") or []
+            idx = a if isinstance(a, list) else ([] if a in (None, "") else [a])
+            picked = [ch[int(i)].get("content", "") or "None of the above" for i in idx
+                      if str(i).lstrip("-").isdigit() and 0 <= int(i) < len(ch)]
+            out.append(" · ".join(picked) or "(blank)")
+        else:
+            out.append(str(a).strip() if a not in (None, "") else "(blank)")
+    return "; ".join(out)
+
+
+def coach_brief(days: int = 21) -> str:
+    """The latest Khan unit test of each unit (last `days` days) for the coach: score, every missed question with
+    the user's answer and the right one, and what practice the user did on those exercises since."""
+    since = (today() - timedelta(days=days)).isoformat()
+    rows = db.q("SELECT * FROM khan_tests WHERE status='submitted' AND date>=? ORDER BY id DESC", (since,))
+    seen, lines = set(), []
+    for t in rows:
+        if t["unit_idx"] in seen:
+            continue
+        seen.add(t["unit_idx"])
+        items, results = json.loads(t["items"]), json.loads(t["results"] or "{}")
+        answers = json.loads(t["answers"] or "{}")
+        try:
+            name = khan_unit(t["unit_idx"])["name"]
+        except Exception:  # noqa: BLE001
+            name = f"unit {t['unit_idx']}"
+        missed = [it for it in items if not (results.get(_key(it)) or {}).get("correct")]
+        ok = (t["score"] or 0) >= 90
+        lines.append(f"Unit test #{t['id']} \"{name}\" on {t['date']}: {t['score']:g}% (pass mark 90%, "
+                     f"{'passed' if ok else 'NOT passed, retake needed'}); {len(items) - len(missed)}/{len(items)} right. "
+                     f"Review page with every question and worked solution: #/khan-test/{t['id']}")
+        by_ex: dict[str, list[dict]] = {}
+        for it in missed:
+            by_ex.setdefault(it["exercise_id"], []).append(it)
+        for ex, its in by_ex.items():
+            title = _title(ex)
+            after = db.q("SELECT correct FROM khan_attempts WHERE exercise_id=? AND mode='practice' AND ts>?",
+                         (ex, t["submitted_at"] or t["created_at"]))
+            prog = _progress(ex)
+            practice = (f"practice since the test: {sum(a['correct'] for a in after)}/{len(after)} right"
+                        if after else "no practice since the test")
+            lines.append(f"  Missed in \"{title}\" ({practice}{'; mastered' if prog['mastered'] else ''}):")
+            for it in its:
+                k = _key(it)
+                try:
+                    item = package(ex)["items"][it["item_id"]]
+                except (Unavailable, KeyError):
+                    continue
+                right = "; ".join(v for v in (results.get(k) or {}).get("solution", {}).values() if v)
+                lines.append(f"    - Q: {_plain(item['question'].get('content', ''))} | user answered: "
+                             f"{_given(item, answers.get(k) or {})} | right answer: {right}")
+    if not lines:
+        return ""
+    return ("[KHAN UNIT TESTS] The user's latest Khan unit tests (already submitted; the user has seen the answers and "
+            "worked solutions on the review page). Use them to steer the user: name the exact weak exercises, go through "
+            "a missed question with them (ask them to redo it and say where they went wrong before you explain the step), "
+            "and send them to practise those exercises in the day's lessons + exercises task before a retake.\n"
+            + "\n".join(lines))

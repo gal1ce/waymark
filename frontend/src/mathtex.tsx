@@ -118,3 +118,33 @@ export function MathText({ text, big = false }: { text: string; big?: boolean })
   if (last < text.length) out.push(text.slice(last))
   return <>{out}</>
 }
+
+/* Inline maths is its own box, so a line could break between "$5" and the full stop after it and start the next
+   line with ". He wants…". A rehype step (after KaTeX) glues punctuation that touches a formula to it: the
+   formula plus a following ".,;:!?)" or a leading "(" go into one no-wrap span. */
+type HNode = { type: string; tagName?: string; value?: string; properties?: Record<string, unknown>; children?: HNode[] }
+const isInlineMath = (n?: HNode) => {
+  const c = n?.type === 'element' ? n.properties?.className : undefined
+  return Array.isArray(c) && c.includes('katex')
+}
+function glue(node: HNode) {
+  const kids = node.children
+  if (!kids) return
+  for (let i = 0; i < kids.length; i++) {
+    const n = kids[i]
+    if (!isInlineMath(n)) { glue(n); continue }
+    const group: HNode[] = [n]
+    const prev = kids[i - 1], next = kids[i + 1]
+    let start = i, end = i
+    const lead = prev?.type === 'text' ? /\(+$/.exec(prev.value ?? '') : null
+    if (lead) { prev!.value = prev!.value!.slice(0, lead.index); group.unshift({ type: 'text', value: lead[0] }) }
+    const trail = next?.type === 'text' ? /^[.,;:!?)\]]+/.exec(next.value ?? '') : null
+    if (trail) { next!.value = next!.value!.slice(trail[0].length); group.push({ type: 'text', value: trail[0] }) }
+    if (group.length === 1) continue
+    if (prev && !prev.value && lead) { start--; }
+    if (next && !next.value && trail) { end++ }
+    kids.splice(start, end - start + 1, { type: 'element', tagName: 'span', properties: { className: ['nowrap'] }, children: group })
+    i = start
+  }
+}
+export const rehypeGluePunct = () => (tree: HNode) => { glue(tree) }

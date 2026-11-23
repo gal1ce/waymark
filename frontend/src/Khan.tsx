@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CalcTool } from './Calc'
-import { Check, ChevronLeft, CircleDashed, Download, ExternalLink, Eye, PlayCircle, Send, SquarePen, X } from 'lucide-react'
+import { SpeedPicker, VideoNotes, savedRate } from './VideoNotes'
+import { Check, ChevronLeft, CircleDashed, Download, ExternalLink, Eye, NotebookPen, PlayCircle, Send, SquarePen, X } from 'lucide-react'
 import { api, ApiError, type KhanCheck, type KhanItem, type KhanOutline, type KhanProgress, type KhanQuestion, type KhanTest, type KhanVideo,
   type PAnswers, type PContent, type Task, fmtMin } from './api'
 import type { Ctx } from './App'
@@ -133,7 +134,10 @@ function KhanVideoView({ id, title, onBack, nextUp }: { id: string; title: strin
   const [ended, setEnded] = useState(false)
   const ref = useRef<HTMLVideoElement>(null)
   useEffect(() => { api.khanVideo(id).then(setV).catch((e: Error) => setErr(e.message)) }, [id])
-  useEffect(() => { if (ref.current) ref.current.playbackRate = 0.75 }, [v])   // the plan: English subtitles at 0.75x
+  // the plan: English subtitles at 0.75x; a speed the user picked is kept for the next video
+  useEffect(() => { if (ref.current) ref.current.playbackRate = savedRate() }, [v])
+  const [notes, setNotesS] = useState(() => { try { return localStorage.getItem('ctu.video.notes') !== 'off' } catch { return true } })
+  const setNotes = (x: boolean) => { setNotesS(x); try { localStorage.setItem('ctu.video.notes', x ? 'on' : 'off') } catch { /* only a preference */ } }
   return (
     <SheetFrame title={title} step={tr('Video')} progress={pct} onClose={onBack} closeLabel={tr('Back to the unit')}
       bar={ended ? (
@@ -141,17 +145,28 @@ function KhanVideoView({ id, title, onBack, nextUp }: { id: string; title: strin
           {nextUp ? <>{tr('Up next')}: {nextUp.title}</> : tr('That was the last step in this unit.')}
         </VerdictBar>
       ) : null}>
-      <div className="sheet-col wide">
+      <div className={'sheet-col wide vid-col' + (notes ? ' with-notes' : '')}>
         <h1 className="sheet-h">{title}</h1>
         {err && <div className="errbox">{err}</div>}
-        {v && (
-          <video ref={ref} className="sheet-video" controls autoPlay preload="metadata" poster={v.poster ?? undefined} src={v.src}
-            onLoadedMetadata={(e) => { e.currentTarget.playbackRate = 0.75 }}
-            onTimeUpdate={(e) => { const d = e.currentTarget.duration; if (d) { setPct(e.currentTarget.currentTime / d); if (e.currentTarget.currentTime / d > 0.9) markWatched(id) } }}
-            onEnded={() => { markWatched(id); setEnded(true) }}>
-            {v.subtitles.map((s) => <track key={s.lang} kind="subtitles" srcLang={s.lang} label={s.label} src={s.src} default={s.lang === 'en'} />)}
-          </video>
-        )}
+        <div className={'vid-layout' + (v && notes ? ' with-notes' : '')}>
+          {v && (
+            <video ref={ref} className="sheet-video" controls autoPlay preload="metadata" poster={v.poster ?? undefined} src={v.src}
+              onLoadedMetadata={(e) => { e.currentTarget.playbackRate = savedRate() }}
+              onTimeUpdate={(e) => { const d = e.currentTarget.duration; if (d) { setPct(e.currentTarget.currentTime / d); if (e.currentTarget.currentTime / d > 0.9) markWatched(id) } }}
+              onEnded={() => { markWatched(id); setEnded(true) }}>
+              {v.subtitles.map((s) => <track key={s.lang} kind="subtitles" srcLang={s.lang} label={s.label} src={s.src} default={s.lang === 'en'} />)}
+            </video>
+          )}
+          {v && (
+            <div className="vid-tools">
+              <SpeedPicker video={ref} />
+              <span className="grow" />
+              <button className={'btn ghost sm' + (notes ? ' on' : '')} aria-pressed={notes} title={notes ? tr('Hide notes') : tr('Take notes')} onClick={() => setNotes(!notes)}>
+                <NotebookPen size={14} strokeWidth={1.6} />{tr('Notes')}</button>
+            </div>
+          )}
+          {v && notes && <VideoNotes title={title} video={ref} />}
+        </div>
         {v?.description && <p className="sheet-desc">{v.description}</p>}
         <p className="sheet-note">{tr('Starts at 0.75× with English subtitles; Turkish is in the CC menu. New terms go to')} <code>eng/math-terms.md</code>.</p>
       </div>

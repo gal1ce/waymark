@@ -2,6 +2,8 @@ import katex from 'katex'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import Markdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
+import { rehypeGluePunct } from './mathtex'
+import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import type { PAnswer, PAnswers, PContent, PFeedback, PWidget } from './api'
 import { Select } from './controls'
@@ -31,7 +33,7 @@ const KHAN_MACROS: Record<string, string> = (() => {
   return m
 })()
 const KATEX = { macros: KHAN_MACROS, throwOnError: false, strict: 'ignore' as const }
-const REHYPE = [[rehypeKatex, KATEX]] as const
+const REHYPE = [[rehypeKatex, KATEX], rehypeGluePunct] as const
 
 /** Khan's TeX that KaTeX won't take as written: worked solutions put {align} inside $…$, which KaTeX only allows in
  *  display mode (the whole formula then showed as red source), so use the inline-safe {aligned}/{gathered}; and some
@@ -42,8 +44,34 @@ const fixTex = (s: string) => s
 
 const tex = (src: string, display = false) => katex.renderToString(fixTex(src), { ...KATEX, macros: { ...KHAN_MACROS }, displayMode: display })
 
+/** Khan writes money inside maths as $\$21$. remark-math ends the formula at that inner \$, so the rest of the
+ *  sentence came out as one long italic formula. Inside maths an escaped dollar becomes \char36 (the same glyph,
+ *  no $ for the parser to trip on); outside maths \$ stays the Markdown escape for a literal dollar. */
+export function mathDollars(s: string): string {
+  let out = '', inMath = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (c === '\\' && i + 1 < s.length) {
+      out += inMath && s[i + 1] === '$' ? '\\char36 ' : c + s[i + 1]
+      i++
+    } else {
+      if (c === '$') inMath = !inMath
+      out += c
+    }
+  }
+  return out
+}
+
+/** A dropdown option is plain text: drop the maths delimiters but keep a money sign. */
+const plainMath = (s: string) => mathDollars(s).replace(/\$/g, '').replace(/\\char36 /g, '$')
+
 /** Widget placeholders become links the renderer swaps for inputs; that keeps them inline in a sentence. */
-const prepare = (s: string) => fixTex(s)
+const prepare = (s: string) => fixTex(mathDollars(s))
+  // a table header that starts "# of bags | …" is not a heading
+  .replace(/^#(?=[^\n]*\|[^\n]*\n[ \t]*\|?[ \t]*:?-+:?[ \t]*\|)/gm, '\\#')
+  // Khan's table rule "- | - | -" reads as a list item to CommonMark; spell it the way GFM expects
+  .replace(/^[ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)+\|?[ \t]*$/gm, (row) =>
+    '|' + row.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim().replace(/-+/, '---')).join('|') + '|')
   // Khan writes "###Heading"; CommonMark needs the space
   .replace(/^(#{1,6})(?=[^\s#])/gm, '$1 ')
   // Khan writes "** bold **"; its renderer allows the inner spaces, CommonMark doesn't
@@ -78,7 +106,8 @@ function MdImg({ src, alt }: { src?: string | Blob; alt?: string }) {
 }
 const BLOCK = { a: MdLink, img: MdImg, p: ({ children }: { children?: ReactNode }) => <div className="p">{children}</div> }
 const INLINE = { ...BLOCK, p: ({ children }: { children?: ReactNode }) => <span className="p-inline">{children}</span> }
-const REMARK = [remarkMath]
+// Khan's worked solutions use pipe tables; single ~ is never strikethrough in Khan text
+const REMARK = [[remarkGfm, { singleTilde: false }], remarkMath] as never
 
 function Md({ text, ctx, inline }: { text: string; ctx: Ctx; inline?: boolean }) {
   return (
@@ -117,7 +146,7 @@ function Widget({ name, ctx }: { name: string; ctx: Ctx }) {
         <span className={'pw-field' + state}>
           <Select className="pw-select" label={String(w.placeholder || 'Choose')} placeholder={String(w.placeholder || 'Choose')} disabled={ctx.disabled}
             value={v === undefined || v === '' ? null : Number(v)} onChange={(x) => ctx.set(name, x)}
-            options={ch.map((c) => ({ value: c.i, label: c.content.replace(/\$/g, ''), text: c.content.replace(/\$/g, '') }))} />
+            options={ch.map((c) => ({ value: c.i, label: plainMath(c.content), text: plainMath(c.content) }))} />
         </span>
       )
     }
@@ -218,7 +247,7 @@ const ALIGN: Record<string, string> = {
 const labelCache = new Map<string, Promise<Label[]>>()
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 /** A text label: escaped, with any $…$ inside set as maths. */
-const labelHtml = (s: string) => s.split(/\$([^$]+)\$/).map((part, i) => (i % 2 ? tex(part) : esc(part))).join('')
+const labelHtml = (s: string) => mathDollars(s).split(/\$([^$]+)\$/).map((part, i) => (i % 2 ? tex(part) : esc(part))).join('')
 
 /** Khan's "graphie" pictures are an svg plus labels placed in graph coordinates; the server turns those into percentages. */
 function Picture({ src, alt, graphie, width }: { src: string; alt: string; graphie: boolean; width?: number }) {

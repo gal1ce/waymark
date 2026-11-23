@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { api, ApiError, fmtDate, streamChat, type ChatBody, type ChatMsg, type CoachSettings, type Convo, type Effort, type ReplyLanguage, type GenLive, type StreamEv, type Task } from './api'
 import type { Ctx } from './App'
-import { fixMathInMd } from './mathtex'
+import { fixMathInMd, rehypeGluePunct } from './mathtex'
 import { GenLog } from './genlog'
 import { MD_CODE } from './codefmt'
 import { squareAvatar } from './picture'
@@ -37,7 +37,7 @@ export function showConvo(today: string | undefined, id: number) {
 /** App links (#/day/…, #/test/3, #/read/<file>) navigate inside the app; anything else opens in a new tab. */
 export function CoachMd({ text, ctx, onNav }: { text: string; ctx: Ctx; onNav?: () => void }) {
   return (
-    <Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{
+    <Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex, rehypeGluePunct]} components={{
       ...MD_CODE,
       a: ({ href = '', children }) => {
         if (href.startsWith('#/')) {

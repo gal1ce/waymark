@@ -1410,6 +1410,8 @@ button.avatar.me-pic { display: grid; place-items: center; padding: 0; border: 0
 .q-prompt .perseus { font-size: inherit; line-height: inherit; }
 .perseus strong { font-weight: 600; }
 .pw-radio { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 4px; }
+/* A question with several parts: the next part's prompt starts clear of the previous part's choices. */
+.perseus .p:has(.pw-radio) + * { margin-top: 24px; }
 .pw-radio .choice { width: 100%; font-size: 16px; color: var(--t1); }
 .pw-radio.ok .choice.on { border-color: oklch(from var(--pos) l c h / 0.55); background: var(--pos-soft); box-shadow: inset 0 -2px 0 oklch(from var(--pos) l c h / 0.4); }
 .pw-radio.bad .choice.on { border-color: oklch(from var(--neg) l c h / 0.55); background: var(--neg-soft); box-shadow: inset 0 -2px 0 var(--neg-line); }
@@ -1423,6 +1425,9 @@ button.avatar.me-pic { display: grid; place-items: center; padding: 0; border: 0
 .perseus .p:last-child { margin-bottom: 0; }
 .perseus .katex { font-size: 1.08em; }
 .perseus ul, .perseus ol { margin: 0 0 10px; padding-left: 22px; }
+.perseus table { display: block; width: max-content; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 4px auto 12px; font-size: 0.92em; }
+.perseus th, .perseus td { border: 1px solid var(--line-strong); padding: 6px 12px; text-align: center; }
+.perseus th { background: var(--s-deep); font-weight: 600; }
 .pw-field { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; vertical-align: middle; margin: 2px 2px; }
 .pw-expr { display: flex; margin: 6px 0; }
 .pw-expr .input { width: min(340px, 100%); }
@@ -1799,6 +1804,7 @@ html.theme-fade, html.theme-fade * { transition: background-color 300ms var(--ea
 .sheet-q .q-math { margin-top: 14px; color: var(--white); }
 .sheet-q .q-math .katex-display > .katex { text-align: center; font-size: 1.5em; }
 .sheet-q .pw-radio { text-align: left; counter-reset: ch; margin-top: 20px; gap: 10px; }
+.sheet-q .perseus .p:has(.pw-radio) + * { margin-top: 40px; }
 .sheet-q .pw-radio .choice { font-size: 17px; min-height: 56px; }
 .sheet-q .pw-radio .choice::before {
   counter-increment: ch; content: counter(ch); flex: none; width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center;
@@ -1825,6 +1831,37 @@ html.theme-fade, html.theme-fade * { transition: background-color 300ms var(--ea
 .sheet-acts .btn.lg:last-child { min-width: 140px; }
 .sheet-sol { width: 100%; }
 .sheet-video { width: 100%; max-height: 64vh; border-radius: 16px; background: #000; display: block; box-shadow: var(--shadow-pop); }
+/* watching: the video, its speed under it, and a sheet of notes beside it from the top of the video to the speed row */
+.sheet-col.vid-col.with-notes { max-width: 1240px; }
+.vid-layout { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 24px; }
+.vid-layout.with-notes { grid-template-columns: minmax(0, 1fr) 340px; }
+.vid-layout.with-notes .vid-notes { grid-column: 2; grid-row: 1 / span 2; }
+.vid-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.vid-speed { flex: none; }
+.vid-speed button { flex: none; padding: 0 10px; font-variant-numeric: tabular-nums; }
+/* the notes: a page of the Notebook, ruled, written in the page's own type */
+.vid-notes {
+  min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--s-card); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow-card);
+  transition: border-color var(--d-hover) var(--ease-out);
+}
+.vid-notes:focus-within { border-color: var(--accent-line); }
+.vid-notes.bad { border-color: var(--neg-line); }
+.vid-notes-h { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 18px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.vid-notes-h b { font-weight: 500; color: var(--t2); }
+.vid-notes-st { flex: 1; min-width: 0; color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vid-notes.bad .vid-notes-st { color: var(--neg); }
+.vid-notes-ta {
+  flex: 1; min-height: 0; width: 100%; resize: none; border: 0; outline: none; margin: 0;
+  padding: 6px 18px 18px; font: 17px/28px var(--serif); color: var(--t1);
+  background: linear-gradient(transparent 27px, oklch(from var(--line) l c h / calc(alpha * 0.7)) 27px) 0 0 / 100% 28px local content-box;
+}
+.vid-notes-ta::placeholder { font-style: italic; color: var(--t3); }
+.vid-notes-ta:disabled { opacity: 0.5; }
+@media (max-width: 1100px) {
+  .vid-layout.with-notes { grid-template-columns: minmax(0, 1fr); }
+  .vid-layout.with-notes .vid-notes { grid-column: 1; grid-row: auto; height: 300px; }
+}
 .sheet-desc { font: 16px/26px var(--serif); color: var(--t2); margin: 0; max-width: 68ch; text-align: center; }
 .sheet-note { font-size: 12px; color: var(--t3); margin: 0; text-align: center; }
 .sheet-submit-early { font-size: 12px; color: var(--t3); }

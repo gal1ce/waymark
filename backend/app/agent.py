@@ -5,12 +5,15 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import json
+import logging
 import re
 from datetime import date, timedelta
 from pathlib import Path
 
 from . import bus, db, llm, practice, profile, prompts, state
 from .config import (COACH_MD, KINTSUGI, NO_HINT_BEFORE_MIN, PLAN_PDF_TEXT, STUDY_REPO, now, today)
+
+log = logging.getLogger(__name__)
 
 TOOLS = [
     {"name": "get_day", "description": "A day's blocks, tasks, times, compile status, scores and sticking points. Today if date is empty.",
@@ -410,6 +413,12 @@ def _today_block() -> str:
         lines.append(f"Last study day {h['date']}: {h['done']}/{h['total']} done"
                      + (f", test {h['test']['score']}/{h['test']['max']}" if h["test"] and h["test"]["status"] == "submitted" else "")
                      + (f", unfinished: {', '.join(h['unfinished'][:4])}" if h["unfinished"] else "") + ".")
+    try:
+        from . import khan
+        if brief := khan.coach_brief():
+            lines.append(brief)
+    except Exception as e:  # noqa: BLE001 - the snapshot must still go out
+        log.warning("khan brief failed: %r", e)
     return "\n".join(lines)
 
 
