@@ -110,7 +110,7 @@ export function Thinking({ phase, label, since, name }: { phase: Draft['phase'];
 }
 
 // A turn lives outside the components, so closing and reopening the panel mid-reply keeps the stream.
-type Turn = { draft: Draft | null; pending: ChatMsg | null; userId: number | null }
+type Turn = { draft: Draft | null; pending: ChatMsg | null; userId: number | null; convo?: number }
 const NONE: Turn = { draft: null, pending: null, userId: null }
 const turns = new Map<string, Turn>()
 const ctls = new Map<string, AbortController>()
@@ -118,6 +118,12 @@ const subs = new Set<() => void>()
 const getTurn = (k: string) => turns.get(k) ?? NONE
 const patchTurn = (k: string, f: (t: Turn) => Turn) => { turns.set(k, f(getTurn(k))); subs.forEach((s) => s()) }
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
+/** A reply streaming into this conversation from somewhere else (the right-click popup), so the panel can show it. */
+const otherKey = (key: string, convo: number | null): string | null => {
+  if (convo == null) return null
+  for (const [k, t] of turns) if (k !== key && t.draft && t.convo === convo) return k
+  return null
+}
 
 /** Runs one streamed turn. The caller calls end() once it has put the result on screen. */
 function useTurn(ctx: Ctx, key: string) {
@@ -128,7 +134,7 @@ function useTurn(ctx: Ctx, key: string) {
     patchTurn(key, () => ({ draft: { text: '', phase: 'thinking', since: Date.now() }, pending, userId: null }))
     const setDraft = (f: (d: Draft) => Draft) => patchTurn(key, (x) => ({ ...x, draft: x.draft && f(x.draft) }))
     const on = (ev: StreamEv) => {
-      if (ev.type === 'start') { patchTurn(key, (x) => ({ ...x, userId: ev.user_id })); onStart?.(ev.convo_id, ev.user_id) }
+      if (ev.type === 'start') { patchTurn(key, (x) => ({ ...x, userId: ev.user_id, convo: ev.convo_id })); onStart?.(ev.convo_id, ev.user_id) }
       else if (ev.type === 'status') setDraft((d) => ({ ...d, phase: ev.phase, label: ev.label }))
       else if (ev.type === 'test') setDraft((d) => ({ ...d, tests: [...(d.tests ?? []).filter((x) => x.id !== ev.id), { id: ev.id, live: ev.live }] }))
       else if (ev.type === 'delta') setDraft((d) => ({ ...d, text: d.text + ev.text, phase: 'writing' }))
@@ -481,7 +487,13 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose }: { ctx: Ctx
   const [list, setList] = useState<Convo[]>([])
   const [msgs, setMsgs] = useState<ChatMsg[]>([])
   const [text, setText] = useState('')
-  const { draft, pending, userId, run, stop, end: endTurn } = useTurn(ctx, 'panel')
+  const own = useTurn(ctx, 'panel')
+  const { pending, userId, run, end: endTurn } = own
+  // a question asked in the popup and continued here: show its reply as it streams
+  const otherK = useSyncExternalStore(subscribe, () => otherKey('panel', fresh ? null : cid))
+  const other = useSyncExternalStore(subscribe, () => (otherK ? getTurn(otherK) : NONE))
+  const draft = own.draft ?? other.draft
+  const stop = () => { own.stop(); if (otherK) ctls.get(otherK)?.abort() }
   const end = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const busy = draft != null
@@ -654,11 +666,22 @@ export function AskPopup({ at, ctx, page, current, hasKey, onClose, onOpenPanel 
   const context = at.context.trim()
   const first = ex.length === 0
 
+  // keep the whole popup on screen as it grows. offsetWidth/Height, not getBoundingClientRect: the pop-in animation
+  // scales the box, and a rect measured mid-animation is too small, which pushed the popup past the bottom edge
   useLayoutEffect(() => {
-    const r = box.current?.getBoundingClientRect()
-    const w = r?.width ?? 420, h = r?.height ?? 240
-    setPos({ left: Math.max(16, Math.min(at.x, window.innerWidth - w - 16)), top: Math.max(16, Math.min(at.y, window.innerHeight - h - 16)) })
-  }, [at.x, at.y, ex.length, busy, draft?.text])
+    const el = box.current
+    if (!el) return
+    const place = () => {
+      const w = el.offsetWidth || 420, h = el.offsetHeight || 240
+      const left = Math.max(16, Math.min(at.x, window.innerWidth - w - 16)), top = Math.max(16, Math.min(at.y, window.innerHeight - h - 16))
+      setPos((p) => (p.left === left && p.top === top ? p : { left, top }))
+    }
+    place()
+    const ro = new ResizeObserver(place)
+    ro.observe(el)
+    window.addEventListener('resize', place)
+    return () => { ro.disconnect(); window.removeEventListener('resize', place) }
+  }, [at.x, at.y])
   useEffect(() => { body.current?.scrollTo({ top: body.current.scrollHeight }) }, [ex.length, draft?.text, draft?.phase])
   useEffect(() => { if (!busy) input.current?.focus() }, [busy])
   // closing the popup doesn't cancel: the reply still lands in the conversation

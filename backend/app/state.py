@@ -292,9 +292,12 @@ def record_khan_score(task_id: int, percent: float) -> dict:
             cursor["khan_unit"] = max(cursor.get("khan_unit", 0), idx + 1)
             db.kv_set("cursor", cursor)
             msg = f"Passed (≥{thr}%). {unit} counts as done."
+            if _skip_unit_study(t["date"], idx, percent):
+                msg += " Its lessons + exercises task isn't needed and is ticked off."
         else:
             add_stuck("low_score", f"{unit} unit test {percent:g}% (threshold {thr}%)", task_id)
             msg = f"Below threshold ({thr}%). Study the unit, then retake the test."
+            _unskip_unit_study(t["date"], idx)
             if percent < 50 and idx == 0:
                 add_stuck("low_score", "Algebra foundations below 50% → check Pre-algebra", task_id)
                 msg += " Below 50%: the agent will pick missing Pre-algebra topics."
@@ -304,6 +307,37 @@ def record_khan_score(task_id: int, percent: float) -> dict:
         log.exception("math/log.md write failed")
         msg += f" (The score is saved, but math/log.md could not be written: {e.strerror or e}.)"
     return {"passed": passed, "message": msg}
+
+
+def _unit_study_tasks(ds: str, idx: int) -> list[dict]:
+    """The day's "lessons + exercises" task for a unit: Khan study for that unit, not one that carries its own test."""
+    return [t for t in (db.decode(r) for r in db.q("SELECT * FROM tasks WHERE date=? AND kind='khan_study'", (ds,)))
+            if int(t["meta"].get("unit_idx", -1)) == idx and t["meta"].get("score_kind") != "khan_unit"]
+
+
+def _skip_unit_study(ds: str, idx: int, percent: float) -> bool:
+    """A passed unit test makes the unit's study task unnecessary ("only if the test is below the threshold"):
+    tick it off, marked as skipped so a later failed retake can open it again."""
+    done = False
+    for t in _unit_study_tasks(ds, idx):
+        if t["status"] == "done":
+            continue
+        _stop(db.q1("SELECT * FROM tasks WHERE id=?", (t["id"],)))
+        meta = {**t["meta"], "skipped": {"reason": "unit_passed", "percent": percent}}
+        db.ex("UPDATE tasks SET status='done', done_at=?, meta=? WHERE id=?",
+              (db.ts(), json.dumps(meta, ensure_ascii=False), t["id"]))
+        log_event("skip", t["id"], {"reason": "unit_passed", "percent": percent})
+        done = True
+    return done
+
+
+def _unskip_unit_study(ds: str, idx: int) -> None:
+    """A retake below the threshold: the study task that was skipped for the earlier pass is needed after all."""
+    for t in _unit_study_tasks(ds, idx):
+        if t["status"] == "done" and t["meta"].get("skipped"):
+            meta = {k: v for k, v in t["meta"].items() if k != "skipped"}
+            db.ex("UPDATE tasks SET status='todo', done_at=NULL, meta=? WHERE id=?", (json.dumps(meta, ensure_ascii=False), t["id"]))
+            log_event("reopen", t["id"], {"reason": "unit_retake_below"})
 
 
 MATH_LOG_HEAD = "# Khan Academy log\n\n| Tarih | Ünite | Unit test | Sonuç |\n|---|---|---|---|\n"

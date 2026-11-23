@@ -6,6 +6,7 @@ import rehypeKatex from 'rehype-katex'
 import { fenceMultiline, MD_CODE } from './codefmt'
 import { Bold, Code, Heading2, Italic, List, Quote, Sigma, SquareSigma } from 'lucide-react'
 import { t as tr, type Key } from './i18n'
+import { texDelims } from './mathtex'
 
 const REMARK = [remarkGfm, remarkMath]
 const REHYPE: never[] = [[rehypeKatex, { throwOnError: false, strict: false }] as never]
@@ -16,7 +17,7 @@ export function NoteMd({ text, className = '' }: { text: string; className?: str
     <div className={'note-md ' + className}>
       <Markdown remarkPlugins={REMARK} rehypePlugins={REHYPE}
         components={{ ...MD_CODE, a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a> }}>
-        {fenceMultiline(text)}
+        {texDelims(fenceMultiline(text))}
       </Markdown>
     </div>
   )

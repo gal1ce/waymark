@@ -33,10 +33,19 @@ const KHAN_MACROS: Record<string, string> = (() => {
 const KATEX = { macros: KHAN_MACROS, throwOnError: false, strict: 'ignore' as const }
 const REHYPE = [[rehypeKatex, KATEX]] as const
 
-const tex = (src: string, display = false) => katex.renderToString(src, { ...KATEX, macros: { ...KHAN_MACROS }, displayMode: display })
+/** Khan's TeX that KaTeX won't take as written: worked solutions put {align} inside $…$, which KaTeX only allows in
+ *  display mode (the whole formula then showed as red source), so use the inline-safe {aligned}/{gathered}; and some
+ *  items carry their row breaks double-escaped (\\\\ for \\), which would add empty rows. */
+const fixTex = (s: string) => s
+  .replace(/\\(begin|end)\{(align|alignat|gather)\*?\}/g, (_, be: string, env: string) => `\\${be}{${env === 'gather' ? 'gathered' : env + 'ed'}}`)
+  .replace(/\\{4}/g, '\\\\')
+
+const tex = (src: string, display = false) => katex.renderToString(fixTex(src), { ...KATEX, macros: { ...KHAN_MACROS }, displayMode: display })
 
 /** Widget placeholders become links the renderer swaps for inputs; that keeps them inline in a sentence. */
-const prepare = (s: string) => s
+const prepare = (s: string) => fixTex(s)
+  // Khan writes "###Heading"; CommonMark needs the space
+  .replace(/^(#{1,6})(?=[^\s#])/gm, '$1 ')
   // Khan writes "** bold **"; its renderer allows the inner spaces, CommonMark doesn't
   .replace(/\*\*[ \t]+([^*\n]+?)[ \t]*\*\*|\*\*([^*\n]+?)[ \t]+\*\*/g, (_, a?: string, b?: string) => `**${(a ?? b ?? '').trim()}**`)
   .replace(/\[\[☃ ([a-z-]+ \d+)\]\]/g, (_, n: string) => `[​](#w/${encodeURIComponent(n)})`)
@@ -243,7 +252,7 @@ export function Solution({ sol, inline }: { sol: Record<string, string>; inline?
   const vals = Object.values(sol).filter(Boolean)
   if (!vals.length) return null
   const empty = { part: { content: '', widgets: {}, graphie: [] }, answers: {}, set: () => {} }
-  const body = vals.map((v, i) => <span key={i} className="pw-sol-v">{i > 0 && ' · '}<Md text={v} ctx={empty} inline /></span>)
+  const body = vals.map((v, i) => <span key={i} className="pw-sol-v">{i > 0 && <span className="pw-sol-sep">, </span>}<Md text={v} ctx={empty} inline /></span>)
   if (inline) return <>{body}</>
   return <div className="pw-solution"><span className="form-l">{tr('Answer')}</span>{body}</div>
 }
