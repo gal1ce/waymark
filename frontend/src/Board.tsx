@@ -1,10 +1,12 @@
 import { t as tr } from './i18n'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  ChartSpline, Copy, Eraser, GripHorizontal, Pencil, Hand, ImagePlus, MousePointer2, MoveUpRight, PenLine, Redo2, Trash2, Type, Undo2,
+  ChartSpline, Copy, Eraser, GripHorizontal, Pencil, Hand, ImagePlus, MousePointer2, MoveUpRight, PenLine, Redo2, Trash2, Type, Undo2, WandSparkles,
 } from 'lucide-react'
 import { strokePath } from './ink'
-import { api, type Arrow, type Board, type CanvasItem, type End } from './api'
+import { api, type Arrow, type Board, type CanvasItem, type End, type Stroke } from './api'
+import { joins, morph, morphAt, read, redraw, type Morph } from './tidy'
+import { classify, warm } from './inkmodel'
 import { GraphFigure, STARTER } from './Graph'
 import { zoomOf } from './page'
 import { MdEditor, NoteMd } from './NoteMd'
@@ -77,6 +79,8 @@ export default function BoardView({ board, onChange, mode, height, onHeight, too
 }) {
   const box = useRef<HTMLDivElement>(null)
   const [b, setB] = useState<Board>(board ?? EMPTY)
+  const latest = useRef(b)   // the board as it is now, for work that finishes later (tidying)
+  latest.current = b
   const [cam, setCam] = useState<Cam>({ x: 0, y: 0, z: 1 })
   const [tool, setTool] = useState<Tool>(mode === 'scratch' ? 'pen' : 'select')
   const [sel, setSel] = useState<string[]>([])
@@ -86,6 +90,26 @@ export default function BoardView({ board, onChange, mode, height, onHeight, too
   const [drag, setDrag] = useState<Drag | null>(null)
   const [penColor, setPenColor] = useState<string>('ink')
   const [penSize, setPenSize] = useState(4)
+  // tidy handwriting (tidy.ts): each digit or sign is redrawn neatly the moment the pen lifts; one undo brings the ink back
+  const [tidy, setTidy] = useState(() => { try { return localStorage.getItem('ctu.ink.tidy') !== 'off' } catch { return true } })
+  const toggleTidy = () => setTidy((on) => { try { localStorage.setItem('ctu.ink.tidy', on ? 'off' : 'on') } catch { /* only a preference */ } return !on })
+  /** the character written last: its raw strokes, the strokes standing for it now, and when (a 7 may still get its bar) */
+  const lastChar = useRef<{ raw: Stroke[]; out: string[]; at: number } | null>(null)
+  useEffect(() => { if (tidy && tool === 'pen') warm() }, [tidy, tool])   // the reading models load in the background
+  /** the ink flowing from what was written into its neat form (a fifth of a second); the neat strokes wait hidden */
+  const [flow, setFlow] = useState<{ m: Morph; hide: Set<string>; t: number } | null>(null)
+  const play = (m: Morph, hide: string[]) => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const t0 = performance.now(), ids = new Set(hide)
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / 200)
+      if (k >= 1) { setFlow(null); return }
+      setFlow({ m, hide: ids, t: 1 - (1 - k) ** 3 })
+      requestAnimationFrame(step)
+    }
+    setFlow({ m, hide: ids, t: 0 })
+    requestAnimationFrame(step)
+  }
   const [space, setSpace] = useState(false)
   const [, bump] = useState(0)
   const past = useRef<Board[]>([]), future = useRef<Board[]>([])
@@ -134,6 +158,7 @@ export default function BoardView({ board, onChange, mode, height, onHeight, too
     past.current.push(before)
     if (past.current.length > 120) past.current.shift()
     future.current = []
+    latest.current = next
     setB(next)
     onChange(next)
   }, [b, onChange])
@@ -367,14 +392,40 @@ export default function BoardView({ board, onChange, mode, height, onHeight, too
     }
   }
 
+  /** after the pen lifts: the new stroke, alone or with the character just before it, redrawn neatly if it is clearly a
+   *  digit or sign. Its own history step, so Ctrl Z gives the ink back exactly as written. */
+  // characters are read one after another (the models answer asynchronously), against the board as it is by then
+  const tidyQueue = useRef<Promise<void>>(Promise.resolve())
+  const tidyStroke = (s: Stroke) => { tidyQueue.current = tidyQueue.current.then(() => tidyOne(s)).catch(() => { /* the ink stays as written */ }) }
+  const tidyOne = async (s: Stroke) => {
+    const prev = lastChar.current, now = () => new Set(latest.current.strokes.map((x) => x.id))
+    let raw = [s], drop = [s.id], r = null
+    if (prev && Date.now() - prev.at < 4000 && prev.raw.length < 3 && prev.raw[0].color === s.color
+      && prev.out.every((id) => now().has(id)) && joins(prev.raw, s)) {
+      const both = await read([...prev.raw, s], classify)
+      if (both) { raw = [...prev.raw, s]; drop = [...prev.out, s.id]; r = both }
+    }
+    r ??= await read([s], classify)
+    const cur = latest.current, have = now()
+    if (!drop.every((id) => have.has(id))) return              // rubbed out or undone while it was being read
+    if (!r) { lastChar.current = { raw: [s], out: [s.id], at: Date.now() }; return }
+    const neat = redraw(raw, r), gone = new Set(drop)
+    commit({ ...cur, strokes: [...cur.strokes.filter((x) => !gone.has(x.id)), ...neat] }, cur)
+    play(morph(raw, neat), neat.map((x) => x.id))
+    lastChar.current = { raw, out: neat.map((x) => x.id), at: Date.now() }
+  }
   const up = (e: React.PointerEvent) => {
     if (!drag) return
     const d = drag
     setDrag(null)
     switch (d.k) {
-      case 'pen':
-        commit({ ...b, strokes: [...b.strokes, { id: uid(), pts: d.pts, color: penColor, size: penSize }] })
+      case 'pen': {
+        const s: Stroke = { id: uid(), pts: d.pts, color: penColor, size: penSize }
+        const drawn = { ...b, strokes: [...b.strokes, s] }
+        commit(drawn)
+        if (tidy) tidyStroke(s)
         break
+      }
       case 'erase': if (erased.current) commit(b, d.start); break
       case 'move': if (d.moved) commit(b, d.start); break
       case 'resize': case 'bend': commit(b, d.start); break
@@ -464,7 +515,8 @@ export default function BoardView({ board, onChange, mode, height, onHeight, too
               </marker>
             ))}
           </defs>
-          {b.strokes.map((s) => <path key={s.id} d={strokePath(s.pts, s.size)} style={{ fill: ink(s.color) }} />)}
+          {b.strokes.map((s) => <path key={s.id} d={strokePath(s.pts, s.size)} style={{ fill: ink(s.color), opacity: flow?.hide.has(s.id) ? 0 : undefined }} />)}
+          {flow && morphAt(flow.m, flow.t).map((s, i) => <path key={'flow' + i} d={strokePath(s.pts, s.size)} style={{ fill: ink(s.color) }} />)}
           {drag?.k === 'pen' && <path d={strokePath(drag.pts, penSize)} style={{ fill: ink(penColor) }} />}
           {b.arrows.map((a) => {
             const g = geos.get(a.id)
@@ -543,6 +595,9 @@ export default function BoardView({ board, onChange, mode, height, onHeight, too
             <span className="pen-opts">
               {INKS.map((c) => <button key={c} className={'ink-sw' + (penColor === c ? ' on' : '')} style={{ background: ink(c) }} aria-label={tr('Ink {c}', { c })} onClick={() => setPenColor(c)} />)}
               {SIZES.map((s) => <button key={s} className={'size-sw' + (penSize === s ? ' on' : '')} aria-label={tr('Pen size {s}', { s })} onClick={() => setPenSize(s)}><i style={{ width: s + 2, height: s + 2 }} /></button>)}
+              <button className={'tool tidy' + (tidy ? ' on' : '')} onClick={toggleTidy} aria-pressed={tidy} aria-label={tr('Tidy handwriting')}
+                title={tr('Tidy handwriting: each digit and sign is redrawn neatly as you lift the pen. Ctrl Z brings back what you wrote.')}>
+                <WandSparkles size={16} strokeWidth={1.7} /></button>
             </span>
           )}
           <span className="tool-sep" />
@@ -600,3 +655,4 @@ function Item({ it, on, solo, editing, onSize, onText, onEndEdit, onFns, onView,
     </div>
   )
 }
+

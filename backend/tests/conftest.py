@@ -19,6 +19,10 @@ os.environ.update({
     "CTU_KOLIBRI_HOME": str(ROOT / "kolibri"), "CTU_KOLIBRI_BIN": str(ROOT / "no-kolibri"),
     "CTU_KOLIBRI_URL": "http://127.0.0.1:9",
     "ANTHROPIC_API_KEY": "", "ANTHROPIC_AUTH_TOKEN": "", "CTU_LLM": "", "GEMINI_API_KEY": "",
+    "OPENAI_API_KEY": "", "OPENROUTER_API_KEY": "", "GROQ_API_KEY": "", "LOCAL_LLM_API_KEY": "",
+    "ANTHROPIC_API_KEYS": "", "GEMINI_API_KEYS": "", "OPENAI_API_KEYS": "", "OPENROUTER_API_KEYS": "", "GROQ_API_KEYS": "",
+    "LOCAL_LLM_API_KEYS": "",
+    "ANTHROPIC_WORKSPACE_ID": "", "CTU_ENV_FILE": str(ROOT / "app.env"),
 })
 os.environ.pop("CTU_NOW", None)
 

@@ -3,7 +3,7 @@ import {
   CalendarCheck, CalendarDays, ChevronRight, CircleAlert, ClipboardCheck, Copy, Flame, House,
   MessageSquareText, Monitor, Moon, NotebookPen, Settings as SettingsIcon, Sun, TrendingUp, UserRound, Zap,
 } from 'lucide-react'
-import { api, ApiError, fmtDate, fmtDur, setWeekBase, type Day, type Meta, type Notice, type Overview, type Xp } from './api'
+import { api, ApiError, fmtDate, fmtDur, setWeekBase, type Day, type Meta, type Notice, type Overview, type UpdateInfo, type Xp } from './api'
 import Dashboard from './Dashboard'
 import DayView from './DayView'
 import CalendarView from './CalendarView'
@@ -12,11 +12,13 @@ import ProfileView from './ProfileView'
 import TestPage, { TestsList } from './TestPage'
 import { KhanTestPage } from './Khan'
 import Reader from './Reader'
+import BeejPage from './BeejPage'
 import { AskPopup, CoachPanel } from './Coach'
 import Tip from './Tip'
 import Notes from './Notes'
 import SettingsView from './SettingsView'
 import Setup from './Setup'
+import { UpdateScreen } from './Update'
 import { Scrollbar } from './Scrollbar'
 import { useLayout, useTheme, type Layout, type ThemePref } from './prefs'
 import { t, t as tApp, useLang, type Lang } from './i18n'
@@ -25,7 +27,7 @@ import { ConfirmDialog, NoticeBell, Toasts, type ConfirmOpts, type Toast } from 
 export type View =
   | { kind: 'dash' } | { kind: 'day'; date: string } | { kind: 'calendar'; month?: string } | { kind: 'progress' }
   | { kind: 'tests' } | { kind: 'test'; id: number } | { kind: 'profile' } | { kind: 'khanTest'; id: number }
-  | { kind: 'notes'; id?: number } | { kind: 'settings' } | { kind: 'setup' }
+  | { kind: 'notes'; id?: number } | { kind: 'settings' } | { kind: 'setup' } | { kind: 'beej'; page: string; sec?: string }
 
 export type Ctx = {
   /** a toast; warnings and errors are also kept in the notification history */
@@ -52,6 +54,8 @@ export type Ctx = {
   setLang: (l: Lang) => void
   /** a page names what's open on it, for the top bar's trail */
   setCrumb: (c: string | null) => void
+  /** opens the update screen (Settings → Updates) */
+  showUpdate: (u: UpdateInfo) => void
 }
 
 // ------------------------------------------------------------- hash routing
@@ -68,10 +72,11 @@ const toHash = (v: View): string => {
     case 'notes': return v.id ? `#/notes/${v.id}` : '#/notes'
     case 'settings': return '#/settings'
     case 'setup': return '#/setup'
+    case 'beej': return `#/beej/${v.page}` + (v.sec ? `/${v.sec}` : '')
   }
 }
 const fromHash = (h: string): View => {
-  const [, a, b] = h.replace(/^#/, '').split('/')
+  const [, a, b, c] = h.replace(/^#/, '').split('/')
   // old Turkish routes still resolve
   if ((a === 'day' || a === 'gun') && b) return { kind: 'day', date: b }
   if (a === 'calendar' || a === 'takvim') return { kind: 'calendar', month: b }
@@ -84,6 +89,7 @@ const fromHash = (h: string): View => {
   if (a === 'notes') return { kind: 'notes', id: b ? Number(b) : undefined }
   if (a === 'settings') return { kind: 'settings' }
   if (a === 'setup') return { kind: 'setup' }
+  if (a === 'beej' && b) return { kind: 'beej', page: b, sec: c }
   return { kind: 'dash' }
 }
 
@@ -143,6 +149,13 @@ export default function App() {
   const [layout, setLayout] = useLayout()
   const [lang, setLang] = useLang()
   const [crumb, setCrumb] = useState<string | null>(null)
+  // a newer version of the packaged program: asked once when the app opens (backend/app/updates.py)
+  const [update, setUpdate] = useState<UpdateInfo | null>(null)
+  useEffect(() => {
+    let off = false
+    api.update().then((u) => { if (!off && u.show && u.latest) setUpdate(u) }).catch(() => {})
+    return () => { off = true }
+  }, [])
   const mainRef = useRef<HTMLElement>(null)
   const fetchedAt = useRef(0)
   useEffect(() => { fetchedAt.current = Date.now() }, [today])
@@ -259,14 +272,13 @@ export default function App() {
   }, [])
 
   const ask = useCallback((context: string, at?: { x: number; y: number }) => {
-    if (exam) { notify(t('Coach is off during a test: closed book'), 'warn'); return }
     const x = at?.x ?? window.innerWidth / 2 - 200, y = at?.y ?? 120
     setMenu(null); setAskAt({ x, y, context })
-  }, [exam, notify])
+  }, [])
 
   // right click anywhere in the content: "Ask the coach". Shift + right click keeps the browser menu.
   const onContext = (e: React.MouseEvent) => {
-    if (e.shiftKey || typing(e.target) || exam) return
+    if (e.shiftKey || typing(e.target)) return
     const el = e.target as HTMLElement
     const sel = window.getSelection()?.toString().trim() ?? ''
     const tagged = el.closest<HTMLElement>('[data-ask]')?.dataset.ask ?? ''
@@ -277,7 +289,7 @@ export default function App() {
   }
 
   const ctx: Ctx = {
-    notify, confirm, run, go, openReader: setReader, refresh, ask, setExam, tick, version, meta, ov, today, todayDate, theme, setTheme, layout, setLayout, lang, setLang, setCrumb,
+    notify, confirm, run, go, openReader: setReader, refresh, ask, setExam, tick, version, meta, ov, today, todayDate, theme, setTheme, layout, setLayout, lang, setLang, setCrumb, showUpdate: setUpdate,
   }
   const current = today?.status === 'active' ? today.current ?? null : null
   const noPlan = !!meta && !meta.plan.ready
@@ -291,7 +303,7 @@ export default function App() {
     { label: t('Notes'), icon: <NotebookPen {...ic} />, v: { kind: 'notes' }, on: view.kind === 'notes' },
     { label: t('Progress'), icon: <TrendingUp {...ic} />, v: { kind: 'progress' }, on: view.kind === 'progress' },
   ]
-  const extra: Record<string, string> = { profile: t('Profile'), settings: t('Settings'), setup: t('Plan setup') }
+  const extra: Record<string, string> = { profile: t('Profile'), settings: t('Settings'), setup: t('Plan setup'), beej: t("Beej's Guide to C") }
   const page = nav.find((n) => n.on)?.label ?? extra[view.kind] ?? ''
   const sub = crumb ?? (view.kind === 'day' && view.date && view.date !== todayDate ? fmtDate(view.date)
     : view.kind === 'test' ? t('Test {n}', { n: view.id }) : view.kind === 'khanTest' ? t('Unit test') : null)
@@ -371,6 +383,7 @@ export default function App() {
           {view.kind === 'profile' && <ProfileView ctx={ctx} />}
           {view.kind === 'notes' && <Notes id={view.id} ctx={ctx} />}
           {view.kind === 'settings' && <SettingsView ctx={ctx} />}
+          {view.kind === 'beej' && <BeejPage page={view.page} sec={view.sec} ctx={ctx} />}
         </main>
         <Scrollbar key={view.kind + ('id' in view ? String(view.id) : '')} target={mainRef} />
       </div>
@@ -395,7 +408,7 @@ export default function App() {
         </>
       )}
       {askAt && (
-        <AskPopup at={askAt} ctx={ctx} page={page} current={current} hasKey={!!meta?.has_api_key}
+        <AskPopup at={askAt} ctx={ctx} page={page} current={current} hasKey={!!meta?.has_api_key} exam={exam}
           onClose={() => setAskAt(null)} onOpenPanel={() => { setAskAt(null); setCoachOpen(true) }} />
       )}
 
@@ -403,6 +416,7 @@ export default function App() {
       <Toasts toasts={toasts} close={closeToast} open={(link) => { location.hash = link }} />
       {asking && <ConfirmDialog opts={asking.opts} done={(ok) => { asking.resolve(ok); setAsking(null) }} />}
       <Tip />
+      {update?.latest && <UpdateScreen info={update} onClose={() => setUpdate(null)} />}
     </div>
   )
 }

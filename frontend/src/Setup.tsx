@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import {
-  ArrowLeft, ArrowRight, BookMarked, Check, ChevronDown, ChevronRight, ClipboardPaste, ExternalLink, FileText, KeyRound,
+  ArrowLeft, ArrowRight, BookMarked, Check, ChevronDown, ChevronRight, ClipboardPaste, ExternalLink, FileText,
   Pencil, RotateCcw, Sparkles, Upload, X,
 } from 'lucide-react'
-import { api, type Answers, type DraftPlan, type KeyInfo, type Onboarding, type PlanTrack, type PlanView } from './api'
+import { AiProviders } from './AiProviders'
+import { api, type Answers, type DraftPlan, type Onboarding, type PlanTrack, type PlanView } from './api'
 import type { Ctx } from './App'
 import { DateInput, Slider, TimeField } from './controls'
 import { addDays, daysBetween, longDate, monthLabel, weekdayMon } from './dates'
@@ -81,50 +82,10 @@ export default function Setup({ ctx }: { ctx: Ctx }) {
   return <Wizard ctx={ctx} ob={ob} plan={plan} />
 }
 
-// ------------------------------------------------------------- the API key
-/** The user's own Anthropic key: checked with Anthropic, kept on this computer, never in a backup. */
-export function KeyCard({ ctx, compact, onSaved }: { ctx: Ctx; compact?: boolean; onSaved?: () => void }) {
-  const [info, setInfo] = useState<KeyInfo | null>(null)
-  const [v, setV] = useState('')
-  const [busy, run] = useBusy()
-  const [shaking, shake] = useShake()
-  useEffect(() => { let off = false; api.keyInfo().then((k) => { if (!off) setInfo(k) }).catch(() => {}); return () => { off = true } }, [ctx.version])
-  const save = () => {
-    if (!v.trim()) { shake(); return }
-    run(async () => {
-      const r = await ctx.run(api.saveKey(v.trim()))
-      if (r) { setInfo(r); setV(''); ctx.notify(t('Key saved. Anthropic accepted it.'), 'ok'); ctx.refresh(); onSaved?.() }
-      else shake()
-    })
-  }
-  const remove = async () => {
-    const ok = await ctx.confirm({ title: t('Remove the API key?'), body: t('The coach, model-written plans and tests stop until a key is added again.'), action: t('Remove'), danger: true })
-    if (!ok) return
-    run(async () => { const r = await ctx.run(api.removeKey()); if (r) { setInfo(r); ctx.refresh() } })
-  }
-  if (!info) return null
-  return (
-    <div className={'key-card' + (compact ? ' compact' : '')}>
-      <p className="set-note">{t('Waymark uses your own Anthropic API key to draft the plan, write tests and run the coach. It stays on this computer, in the data folder, and is never put into a backup file.')}{' '}
-        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">{t('Get a key')}<ExternalLink size={12} strokeWidth={1.6} /></a></p>
-      {info.free_mode && <p className="set-note">{t('Free test mode is on (CTU_LLM=gemini): requests go to Gemini, not Anthropic.')}</p>}
-      {info.source === 'env' ? (
-        <p className="key-state"><Check size={15} strokeWidth={1.8} />{t('A key is set in .env ({hint}). Change it there.', { hint: info.hint || '…' })}</p>
-      ) : info.set ? (
-        <div className="inline-form">
-          <p className="key-state"><Check size={15} strokeWidth={1.8} />{t('Key saved ({hint})', { hint: info.hint })}</p>
-          <button type="button" className="btn ghost sm" {...busyProps(busy)} onClick={remove}><X size={14} strokeWidth={1.6} /><span>{t('Remove')}</span></button>
-        </div>
-      ) : (
-        <form className="inline-form" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); save() }}>
-          <label className="sr-only" htmlFor="api-key">{t('Anthropic API key')}</label>
-          <input id="api-key" className={'input key-input mono' + (shaking ? ' shake' : '')} type="password" autoComplete="off" spellCheck={false}
-            placeholder="sk-ant-…" value={v} onChange={(e) => setV(e.target.value)} data-autofocus />
-          <button type="submit" className="btn primary sm" {...busyProps(busy)}><KeyRound size={14} strokeWidth={1.6} /><span>{t('Check and save')}</span></button>
-        </form>
-      )}
-    </div>
-  )
+// ------------------------------------------------------------- the AI providers
+/** Where the model requests go: providers, their keys (in .env) and models. See AiProviders.tsx. */
+export function KeyCard({ ctx, onSaved }: { ctx: Ctx; compact?: boolean; onSaved?: () => void }) {
+  return <AiProviders ctx={ctx} onSaved={onSaved} />
 }
 
 // ------------------------------------------------------------- the frame: a sheet of paper over the app

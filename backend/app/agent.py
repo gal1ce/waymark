@@ -5,12 +5,15 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import json
+import logging
 import re
 from datetime import date, timedelta
 from pathlib import Path
 
-from . import bus, db, llm, practice, profile, prompts, state
+from . import bus, db, llm, practice, profile, prompts, providers, state
 from .config import (COACH_MD, KINTSUGI, NO_HINT_BEFORE_MIN, PLAN_PDF_TEXT, STUDY_REPO, now, today)
+
+log = logging.getLogger(__name__)
 
 TOOLS = [
     {"name": "get_day", "description": "A day's blocks, tasks, times, compile status, scores and sticking points. Today if date is empty.",
@@ -410,6 +413,12 @@ def _today_block() -> str:
         lines.append(f"Last study day {h['date']}: {h['done']}/{h['total']} done"
                      + (f", test {h['test']['score']}/{h['test']['max']}" if h["test"] and h["test"]["status"] == "submitted" else "")
                      + (f", unfinished: {', '.join(h['unfinished'][:4])}" if h["unfinished"] else "") + ".")
+    try:
+        from . import khan
+        if brief := khan.coach_brief():
+            lines.append(brief)
+    except Exception as e:  # noqa: BLE001 - the snapshot must still go out
+        log.warning("khan brief failed: %r", e)
     return "\n".join(lines)
 
 
@@ -490,12 +499,20 @@ def _visible(text: str, learning: bool) -> str:
     return _guard(text, learning)
 
 
-def prepare(convo_id: int | None, new: bool) -> int:
-    """Checks that can fail before a stream starts; returns the conversation id to use."""
-    from . import coach
+def closed_book(asked: bool = False) -> bool:
+    """A graded test is running: the client says so (a Khan unit test is open), or an end-of-day test is in its time."""
     from .tests_eod import active_exam
-    if active_exam():
-        raise state.Refused("A test is in progress: closed book, the coach is off.")
+    return asked or bool(active_exam())
+
+
+def prepare(convo_id: int | None, new: bool, closed: bool = False) -> int:
+    """Checks that can fail before a stream starts; returns the conversation id to use.
+    Closed book, questions go to a conversation of their own: the day's conversation has talked about past tests
+    and their right answers, which a retake may ask again."""
+    from . import coach
+    if closed:
+        c = coach.convo(convo_id) if convo_id and not new else None
+        return c["id"] if c and c["title"] == coach.CLOSED_BOOK_TITLE else coach.create_convo(coach.CLOSED_BOOK_TITLE)
     if new:
         return coach.create_convo()
     if convo_id and coach.convo(convo_id):
@@ -510,27 +527,31 @@ def _system() -> list[dict]:
     return [{"type": "text", "text": prompts.coach_system()}, {"type": "text", "text": coach.style_block()}]
 
 
-async def chat_events(user_text: str, cid: int):
+async def chat_events(user_text: str, cid: int, closed: bool = False):
     """One coach turn as a stream of events:
     start · status {phase: thinking|tool|running, label} · test {id, live} (a practice test being written; its progress
-    arrives on the app's event stream) · delta {text} · replace {text} · done {reply, id} · error {message}"""
+    arrives on the app's event stream) · delta {text} · replace {text} · done {reply, id} · error {message}
+    Closed book (a graded test is running): a reference page only. No [TODAY] block (it holds past tests' right
+    answers), no tools, no practice tests; the rules in prompts.CLOSED_BOOK."""
     from . import coach
     task = state.current_task()
     tid = task and task["id"]
     status, learning = _status_block(task)
+    if closed:
+        status += "\n\n" + prompts.CLOSED_BOOK
     history = _history_messages(cid)
     uid = _save(cid, "user", user_text, user_text, tid)
     _save(cid, "system", status, "", tid, hidden=True)
     coach.touch(cid, user_text)
     try:
-        snapshot = _today_block()
+        snapshot = "" if closed else _today_block()
     except Exception as e:  # noqa: BLE001 - the chat must still work
         snapshot = f"[TODAY] unavailable ({e!r}); use get_day."
     turn = {"router": False, "ids": {}, "convo": cid}
     _turn_tests.set(turn)
     made: list[int] = []
     fail = None
-    for it in practice.parse(user_text, history):
+    for it in ([] if closed else practice.parse(user_text, history)):
         try:
             made.append(make_practice_test(practice.resolve(it, cid), it.copy))
         except Exception as e:  # noqa: BLE001 - the chat still answers
@@ -562,13 +583,22 @@ async def chat_events(user_text: str, cid: int):
         earlier = [m["content"] for m in history if _is_turn_start(m)]
         lang = coach.language_line(user_text, earlier)
         messages = _sanitize(history + [{"role": "user", "content": user_text},
-                                        {"role": "system", "content": status + "\n\n" + snapshot + "\n\n" + lang}])
+                                        {"role": "system", "content": "\n\n".join(x for x in (status, snapshot, lang) if x)}])
         yield {"type": "status", "phase": "thinking"}
         for _ in range(8):
             buf, resp = "", None
-            async for kind, val in llm.stream(system=_system(), messages=messages, tools=tools(), effort=coach.settings()["effort"],
-                                              max_tokens=max_tokens, model=coach.chat_model()):
-                if kind == "text":
+            async for kind, val in llm.stream(system=_system(), messages=messages, tools=None if closed else tools(), effort=coach.settings()["effort"],
+                                              max_tokens=max_tokens, role="chat"):
+                if kind == "restart":
+                    # the provider broke off mid-reply; the next key or provider writes it again from the start
+                    buf = ""
+                    vis = _visible(joined(), learning)
+                    yield {"type": "replace", "text": vis}
+                    yield {"type": "status", "phase": "thinking", "label": val}
+                    shown = vis
+                elif kind == "switch":
+                    yield {"type": "status", "phase": "thinking", "label": f"Trying {val[1]}"}
+                elif kind == "text":
                     buf += val
                     vis = _visible(joined(buf), learning)
                     if vis.startswith(shown):
@@ -600,6 +630,10 @@ async def chat_events(user_text: str, cid: int):
                     final += "\n\n" + " · ".join(f"[Practice test #{i}](#/test/{i})" for i in miss)
                 if resp.stop_reason == "max_tokens":
                     final += "\n\n_(cut off: reply hit the length limit)_"
+                elif resp.stop_reason == "cut":
+                    final += "\n\n_(the model stopped mid-reply, probably overloaded; send the question again)_"
+                if getattr(resp, "provider", None) and resp.provider != providers.primary():
+                    final += f"\n\n_(answered by {llm.label_of(resp)}: the main provider didn't answer)_"
                 aid = _save(cid, "assistant", content, final, tid)
                 finished = True
                 yield {"type": "done", "reply": final, "id": aid, "convo_id": cid}
@@ -642,7 +676,7 @@ async def chat_events(user_text: str, cid: int):
         raise
     except Exception as e:
         # Keep the stored conversation valid so the next turn still works.
-        msg = f"Couldn't reach the agent: {e}"
+        msg = str(e) if isinstance(e, (llm.Unavailable, llm.NoKey)) else f"Couldn't reach the agent: {e}"
         _save(cid, "assistant", [{"type": "text", "text": "(connection error)"}], msg)
         finished = True
         yield {"type": "error", "message": msg}
@@ -651,9 +685,9 @@ async def chat_events(user_text: str, cid: int):
         bus.publish("chat", {"state": "idle", "convo": cid})
 
 
-async def chat(user_text: str, cid: int) -> str:
+async def chat(user_text: str, cid: int, closed: bool = False) -> str:
     """Non-streaming fallback: run the same turn and return the final reply."""
-    async for ev in chat_events(user_text, cid):
+    async for ev in chat_events(user_text, cid, closed):
         if ev["type"] == "done":
             return ev["reply"]
         if ev["type"] == "error":

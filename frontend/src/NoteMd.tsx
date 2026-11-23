@@ -6,10 +6,10 @@ import rehypeKatex from 'rehype-katex'
 import { fenceMultiline, MD_CODE } from './codefmt'
 import { Bold, Code, Heading2, Italic, List, Quote, Sigma, SquareSigma } from 'lucide-react'
 import { t as tr, type Key } from './i18n'
-import { texDelims } from './mathtex'
+import { rehypeGluePunct, texDelims } from './mathtex'
 
 const REMARK = [remarkGfm, remarkMath]
-const REHYPE: never[] = [[rehypeKatex, { throwOnError: false, strict: false }] as never]
+const REHYPE: never[] = [[rehypeKatex, { throwOnError: false, strict: false }] as never, rehypeGluePunct as never]
 
 /** Markdown with LaTeX: $inline$ and $$display$$, tables, lists, code. */
 export function NoteMd({ text, className = '' }: { text: string; className?: string }) {

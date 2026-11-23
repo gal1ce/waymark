@@ -4,10 +4,9 @@ an outline, and the free Gemini mode retries a busy server. Nothing here goes to
 from __future__ import annotations
 
 import asyncio
-import urllib.error
 from datetime import date
 
-from app import db, free_llm, onboarding, profile, state, tracks
+from app import db, onboarding, profile, state, tracks
 from test_custom_plan import ANSWERS, H, _draft_and_approve, _fake_model, client, model_draft  # noqa: F401
 
 
@@ -85,26 +84,3 @@ def test_a_locked_day_shows_its_outline_but_no_tasks(client, monkeypatch):
     assert ahead["status"] == "locked" and ahead["outline"]
     assert all("detail" not in b for b in ahead["outline"]) and any(b["unit"] for b in ahead["outline"])
     assert state.get_day("2027-03-01")["outline"] is None    # too far ahead
-
-
-def test_gemini_busy_is_retried_then_falls_over(monkeypatch):
-    monkeypatch.setattr(free_llm, "RETRY_WAIT", (0, 0))
-    tries = []
-
-    def post(body):
-        tries.append(body["model"])
-        if len(tries) < 3:
-            raise free_llm._raise_http(urllib.error.HTTPError("u", 503, "busy", {}, None), body["model"])
-        return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]}
-    monkeypatch.setattr(free_llm, "_post", post)
-    r = asyncio.run(free_llm.create(system="s", messages=[{"role": "user", "content": "hi"}]))
-    assert r.content[0].text == "ok" and len(tries) == 3 and len(set(tries)) == 1
-
-    tries.clear()
-    monkeypatch.setattr(free_llm, "_post", lambda body: (_ for _ in ()).throw(
-        free_llm._raise_http(urllib.error.HTTPError("u", 503, "busy", {}, None), body["model"])))
-    try:
-        asyncio.run(free_llm.create(system="s", messages=[{"role": "user", "content": "hi"}]))
-        raise AssertionError("expected an error")
-    except RuntimeError as e:
-        assert "overloaded" in str(e) and "HTTP 503" not in str(e)

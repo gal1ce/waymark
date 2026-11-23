@@ -1,7 +1,8 @@
 import { t as tr } from './i18n'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, Calculator, Check, Delete, Eye, EyeOff, FileText, Keyboard, Lightbulb, Lock, PencilLine, PenLine, X, Zap } from 'lucide-react'
+import { ArrowRight, Calculator, Check, Delete, Eye, EyeOff, FileText, Keyboard, Lightbulb, Lock, MessageCircleQuestion, PencilLine, PenLine, X, Zap } from 'lucide-react'
+import type { Ctx } from './App'
 import type { Board, DocBlock, PageSetup, Stroke } from './api'
 import { DocEditor } from './DocEditor'
 import { DocPage } from './DocPage'
@@ -79,11 +80,38 @@ export function HintPills({ taken, total, onTake, onShow, busy, disabled, extra 
 }
 
 /** A tool in the sheet's top bar: scratch paper, the keypad. Icon, a word, and its key. */
-export function SheetTool({ on, onClick, label, kbd, children }: { on?: boolean; onClick: () => void; label: string; kbd?: string; children: ReactNode }) {
+export function SheetTool({ on, onClick, label, kbd, children }: { on?: boolean; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; label: string; kbd?: string; children: ReactNode }) {
   return (
     <button className={'sheet-tool' + (on ? ' on' : '')} onClick={onClick} aria-pressed={on} title={kbd ? `${label}  ${kbd}` : label}>
       {children}<span className="st-l">{label}</span>{kbd && <kbd>{kbd}</kbd>}
     </button>
+  )
+}
+
+/** The question on screen as text for the coach: KaTeX becomes its $TeX$ (its MathML copy would read twice), inputs drop out. */
+function questionText(): string {
+  const el = document.querySelector<HTMLElement>('.sheet-body .sheet-q') ?? document.querySelector<HTMLElement>('.sheet-body .sheet-h')
+  if (!el) return ''
+  const c = el.cloneNode(true) as HTMLElement
+  c.querySelectorAll('.katex').forEach((k) => {
+    const tex = k.querySelector('annotation')?.textContent
+    const block = !!k.closest('.katex-display')   // display maths is a line of its own
+    // display maths fenced on lines of its own, so the popup sets it as a block again
+    k.replaceWith(tex ? (block ? `\n\n$$\n${tex}\n$$\n\n` : `$${tex}$`) : (k.textContent ?? ''))
+  })
+  c.querySelectorAll('input, textarea, button, select, .pw-preview').forEach((x) => x.remove())
+  return (c.textContent ?? '').replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 600)
+}
+
+/** Ask the coach from a study sheet: a popup under the button with the question on screen as its context. During a
+ *  graded test the popup is closed book (rules, formulas and words; the server holds it to that). */
+export function AskTool({ ctx }: { ctx: Ctx }) {
+  const name = ctx.meta?.coach_name || 'Coach'
+  return (
+    <SheetTool label={tr('Ask {name}', { name })} onClick={(e) => {
+      const r = e.currentTarget.getBoundingClientRect()
+      ctx.ask(questionText(), { x: r.right - 440, y: r.bottom + 8 })
+    }}><MessageCircleQuestion size={15} strokeWidth={1.6} /></SheetTool>
   )
 }
 

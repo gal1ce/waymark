@@ -619,7 +619,7 @@ def _set(st: dict) -> None:
 def start(answers: dict, change: str = "") -> dict:
     """Starts writing a draft (or a changed draft). Returns at once; the job reports through kv 'onboarding'."""
     if not has_api_key():
-        raise state.Refused("Add your API key first (Settings → AI key): the plan is drafted by the model.")
+        raise state.Refused("Set up an AI provider first (Settings → AI providers): the plan is drafted by the model.")
     if "draft" in _running:
         raise state.Refused("A draft is being written already.")
     old = db.kv_get("onboarding", None) or {}

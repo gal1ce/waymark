@@ -9,7 +9,7 @@ import { highlightC } from './codefmt'
 import { MathText, TexBlock } from './mathtex'
 import { GenLog } from './genlog'
 import { bumpXp } from './prefs'
-import { Scratch, ScratchIcon, ScoreRing, SheetFrame, SheetTool } from './Sheet'
+import { AskTool, Scratch, ScratchIcon, ScoreRing, SheetFrame, SheetTool } from './Sheet'
 import { t as tr, type Key } from './i18n'
 
 const KIND: Record<string, Key> = { eod: 'End-of-day test', c_quiz: 'C quiz', unit_quiz: 'Unit check', practice: 'Practice test' }
@@ -238,7 +238,7 @@ export default function TestPage({ id, ctx, version }: { id: number; ctx: Ctx; v
     }
     if (submitted) {
       return (
-        <SheetFrame title={title} step={`${t.score}/${t.max} · ${tr('review')}`} progress={1} onClose={() => setAll(false)} closeLabel={tr('Back to the result')}>
+        <SheetFrame title={title} step={`${t.score}/${t.max} · ${tr('review')}`} progress={1} onClose={() => setAll(false)} closeLabel={tr('Back to the result')} right={<AskTool ctx={ctx} />}>
           <div className="sheet-col review" ref={root}>{t.questions.map(question)}</div>
         </SheetFrame>
       )
@@ -250,6 +250,7 @@ export default function TestPage({ id, ctx, version }: { id: number; ctx: Ctx; v
         right={<>
           <SheetTool onClick={() => setScratch(true)} label={tr('Scratch paper')} kbd="D"><ScratchIcon /></SheetTool>
           <CalcTool as={(p) => <SheetTool {...p} />} />
+          <AskTool ctx={ctx} />
           {left != null && <span className={'sheet-timer mono' + (left < 300 ? ' urgent' : '')} role="timer"><Timer size={14} strokeWidth={1.8} />{fmtDur(left)}</span>}
         </>}>
         <div className="sheet-col" ref={root}>

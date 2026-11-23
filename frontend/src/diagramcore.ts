@@ -10,7 +10,7 @@
      a = 2                              a number the other lines can use: (a, 0, a/2)
 */
 
-import { evalNum, type Anchor } from './graph'
+import { evalNum, type Anchor } from './graphcore'
 
 export type V3 = [number, number, number]
 export type Cam = { az: number; el: number }

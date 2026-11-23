@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CalcTool } from './Calc'
-import { Check, ChevronLeft, CircleDashed, Download, ExternalLink, Eye, PlayCircle, Send, SquarePen, X } from 'lucide-react'
+import { SpeedPicker, VideoNotes, savedRate } from './VideoNotes'
+import { Fold } from './Fold'
+import { Check, ChevronLeft, CircleDashed, Download, ExternalLink, Eye, NotebookPen, PlayCircle, Send, SquarePen, X } from 'lucide-react'
 import { api, ApiError, type KhanCheck, type KhanItem, type KhanOutline, type KhanProgress, type KhanQuestion, type KhanTest, type KhanVideo,
-  type PAnswers, type PContent, type Task, fmtMin } from './api'
+  type PAnswers, type PContent, type PSolution, type Task, fmtMin } from './api'
 import type { Ctx } from './App'
 import { busyProps, useBusy, useQuestionFocus } from './interact'
 import { PerseusStatic, PerseusView, Solution } from './Perseus'
 import { bumpXp } from './prefs'
-import { HintPills, Keypad, KeypadIcon, NextArrow, Scratch, ScratchIcon, ScoreRing, SheetFrame, SheetTool, VerdictBar } from './Sheet'
+import { AskTool, HintPills, Keypad, KeypadIcon, NextArrow, Scratch, ScratchIcon, ScoreRing, SheetFrame, SheetTool, VerdictBar } from './Sheet'
 import { t as tr } from './i18n'
 
 /* Khan Academy inside the app: the unit's videos and exercises (Kolibri's copy of the Khan channel),
@@ -70,7 +72,7 @@ export function KhanUnitPanel({ task, ctx, active }: { task: Task; ctx: Ctx; act
   let n = 0
   return (
     <div className="kpanel">
-      {open?.kind === 'video' && <KhanVideoView id={open.id} onBack={back} title={flat.find((i) => i.id === open.id)?.title ?? tr('Video')}
+      {open?.kind === 'video' && <KhanVideoView id={open.id} ctx={ctx} onBack={back} title={flat.find((i) => i.id === open.id)?.title ?? tr('Video')}
         nextUp={(() => { const i = flat.findIndex((x) => x.id === open.id); const nx = flat.slice(i + 1).find((x) => x.ready); return nx ? { title: nx.title, go: () => { setSeen(watched()); openItem(nx) } } : null })()} />}
       {open?.kind === 'exercise' && <KhanPractice id={open.id} onBack={back} ctx={ctx} kolibri={o.status.server ? open.kolibri ?? null : null} partial={!!open.partial} />}
       <div className="unit-top">
@@ -126,34 +128,54 @@ export function KhanUnitPanel({ task, ctx, active }: { task: Task; ctx: Ctx; act
   )
 }
 
-function KhanVideoView({ id, title, onBack, nextUp }: { id: string; title: string; onBack: () => void; nextUp: { title: string; go: () => void } | null }) {
+function KhanVideoView({ id, title, onBack, nextUp, ctx }: { id: string; title: string; onBack: () => void; nextUp: { title: string; go: () => void } | null; ctx: Ctx }) {
   const [v, setV] = useState<KhanVideo | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [pct, setPct] = useState(0)
   const [ended, setEnded] = useState(false)
   const ref = useRef<HTMLVideoElement>(null)
   useEffect(() => { api.khanVideo(id).then(setV).catch((e: Error) => setErr(e.message)) }, [id])
-  useEffect(() => { if (ref.current) ref.current.playbackRate = 0.75 }, [v])   // the plan: English subtitles at 0.75x
+  // the plan: English subtitles at 0.75x; a speed the user picked is kept for the next video
+  useEffect(() => { if (ref.current) ref.current.playbackRate = savedRate() }, [v])
+  const [notes, setNotesS] = useState(() => { try { return localStorage.getItem('ctu.video.notes') !== 'off' } catch { return true } })
+  const setNotes = (x: boolean) => { setNotesS(x); try { localStorage.setItem('ctu.video.notes', x ? 'on' : 'off') } catch { /* only a preference */ } }
   return (
     <SheetFrame title={title} step={tr('Video')} progress={pct} onClose={onBack} closeLabel={tr('Back to the unit')}
+      right={<AskTool ctx={ctx} />}
       bar={ended ? (
         <VerdictBar tone="info" title={tr('Video watched')} action={nextUp ? tr('Next step') : tr('Back to the unit')} onAction={nextUp ? nextUp.go : onBack}>
           {nextUp ? <>{tr('Up next')}: {nextUp.title}</> : tr('That was the last step in this unit.')}
         </VerdictBar>
       ) : null}>
-      <div className="sheet-col wide">
-        <h1 className="sheet-h">{title}</h1>
+      <div className={'sheet-col vid-col' + (notes ? ' with-notes' : '')}>
         {err && <div className="errbox">{err}</div>}
-        {v && (
-          <video ref={ref} className="sheet-video" controls autoPlay preload="metadata" poster={v.poster ?? undefined} src={v.src}
-            onLoadedMetadata={(e) => { e.currentTarget.playbackRate = 0.75 }}
-            onTimeUpdate={(e) => { const d = e.currentTarget.duration; if (d) { setPct(e.currentTarget.currentTime / d); if (e.currentTarget.currentTime / d > 0.9) markWatched(id) } }}
-            onEnded={() => { markWatched(id); setEnded(true) }}>
-            {v.subtitles.map((s) => <track key={s.lang} kind="subtitles" srcLang={s.lang} label={s.label} src={s.src} default={s.lang === 'en'} />)}
-          </video>
-        )}
-        {v?.description && <p className="sheet-desc">{v.description}</p>}
-        <p className="sheet-note">{tr('Starts at 0.75× with English subtitles; Turkish is in the CC menu. New terms go to')} <code>eng/math-terms.md</code>.</p>
+        {/* in the order of watching: the video, its speed under it, notes beside it; what the video is about is folded below */}
+        <div className={'vid-layout' + (v && notes ? ' with-notes' : '')}>
+          <h1 className="sheet-h">{title}</h1>
+          {v && (
+            <video ref={ref} className="sheet-video" controls autoPlay preload="metadata" poster={v.poster ?? undefined} src={v.src}
+              onLoadedMetadata={(e) => { e.currentTarget.playbackRate = savedRate() }}
+              onTimeUpdate={(e) => { const d = e.currentTarget.duration; if (d) { setPct(e.currentTarget.currentTime / d); if (e.currentTarget.currentTime / d > 0.9) markWatched(id) } }}
+              onEnded={() => { markWatched(id); setEnded(true) }}>
+              {v.subtitles.map((s) => <track key={s.lang} kind="subtitles" srcLang={s.lang} label={s.label} src={s.src} default={s.lang === 'en'} />)}
+            </video>
+          )}
+          {v && (
+            <div className="vid-tools">
+              <SpeedPicker video={ref} />
+              <span className="grow" />
+              <button className={'btn ghost sm' + (notes ? ' on' : '')} aria-pressed={notes} title={notes ? tr('Hide notes') : tr('Take notes')} onClick={() => setNotes(!notes)}>
+                <NotebookPen size={14} strokeWidth={1.6} />{tr('Notes')}</button>
+            </div>
+          )}
+          {v && notes && <VideoNotes title={title} video={ref} />}
+          {v && (
+            <Fold className="vid-about" title={tr('About this video')} remember="video-about">
+              {v.description && <p className="sheet-desc">{v.description}</p>}
+              <p className="sheet-note">{tr('Starts at 0.75× with English subtitles; Turkish is in the CC menu. New terms go to')} <code>eng/math-terms.md</code>.</p>
+            </Fold>
+          )}
+        </div>
       </div>
     </SheetFrame>
   )
@@ -165,7 +187,7 @@ function KhanPractice({ id, onBack, ctx, kolibri, partial }: { id: string; onBac
   const [ans, setAns] = useState<PAnswers>({})
   const [res, setRes] = useState<KhanCheck | null>(null)
   const [hints, setHints] = useState<PContent[]>([])
-  const [revealed, setRevealed] = useState<Record<string, string> | null>(null)
+  const [revealed, setRevealed] = useState<PSolution | null>(null)
   const [progress, setProgress] = useState<KhanProgress | null>(null)
   const [gain, setGain] = useState<{ xp: number; mastered: boolean } | null>(null)
   const [scratch, setScratch] = useState(false)
@@ -235,6 +257,7 @@ function KhanPractice({ id, onBack, ctx, kolibri, partial }: { id: string; onBac
         <SheetTool onClick={() => setScratch(true)} label={tr('Scratch paper')} kbd="D"><ScratchIcon /></SheetTool>
         <CalcTool as={(p) => <SheetTool {...p} />} />
         <SheetTool on={pad} onClick={() => setPad((x) => !x)} label={tr('Keypad')}><KeypadIcon /></SheetTool>
+        <AskTool ctx={ctx} />
       </>}
       bar={bar}>
       <div className="sheet-col" ref={col} onKeyDown={(e) => {
@@ -244,7 +267,7 @@ function KhanPractice({ id, onBack, ctx, kolibri, partial }: { id: string; onBac
       }}>
         <h1 className="sheet-h"><em>{tr('Practice')}</em> {q?.title}</h1>
         {p && <Dots p={p} />}
-        {q && <div className="statline"><span>{tr('Right')} <b>{right}/{p?.last.length ?? 0}</b></span><span>{tr('Mastery at')} <b className="ink">{p?.m ?? 5}/{p?.n ?? 7}</b></span><span>{tr('Hints')} <b className="ink">{hints.length}/{q.hints_total}</b></span></div>}
+        {/* right/mastery is in the top bar, hints on the hint pills: nothing between the title and the question */}
         {err && <div className="errbox">{err}{' '}{kolibri && <a href={kolibri} target="_blank" rel="noreferrer">{tr('Open in Kolibri')}</a>}</div>}
         {q && (
           <>
@@ -368,7 +391,7 @@ export function KhanTestPage({ id, ctx }: { id: number; ctx: Ctx }) {
         {r && (
           <div className={'verdict ' + (r.correct ? 'ok' : 'no')}>
             {r.correct ? <Check size={14} strokeWidth={2} /> : <X size={14} strokeWidth={2} />}
-            <span>{r.correct ? tr('Correct') : <>{tr('Answer')}: <Solution sol={r.solution} inline /></>}</span>
+            <div className="verdict-b">{r.correct ? tr('Correct') : <><span>{tr('Answer')}:</span><Solution sol={r.solution} inline /></>}</div>
           </div>
         )}
         {r && !r.correct && q.hints && q.hints.length > 0 && (
@@ -407,7 +430,7 @@ export function KhanTestPage({ id, ctx }: { id: number; ctx: Ctx }) {
   }
   if (review) {
     return (
-      <SheetFrame title={title} step={`${t.score}% · ${tr('review')}`} progress={1} onClose={() => setReview(false)} closeLabel={tr('Back to the result')}>
+      <SheetFrame title={title} step={`${t.score}% · ${tr('review')}`} progress={1} onClose={() => setReview(false)} closeLabel={tr('Back to the result')} right={<AskTool ctx={ctx} />}>
         <div className="sheet-col review" ref={root}>{t.questions.map(question)}</div>
       </SheetFrame>
     )
@@ -419,6 +442,7 @@ export function KhanTestPage({ id, ctx }: { id: number; ctx: Ctx }) {
       right={<>
         <SheetTool onClick={() => setScratch(true)} label={tr('Scratch paper')} kbd="D"><ScratchIcon /></SheetTool>
         <CalcTool as={(p) => <SheetTool {...p} />} />
+        <AskTool ctx={ctx} />
         <span className="sheet-count mono" title={tr('Answered')}>{count}/{n}</span>
       </>}>
       <div className="sheet-col" ref={root}>

@@ -16,9 +16,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
-from . import (account, agent, backup, bus, codecheck, coach, config, db, health, insights, keys, khan, lessons, monitor, notes, notices,
-               onboarding, planlog, planner, practice, profile, seed, state, tests_eod, tracks, xp)
-from .config import (APP_ROOT, COACH_MD, DATA_DIR, DB_PATH, FAKE_CLOCK, KINTSUGI, MODEL, STUDY_REPO, has_api_key,
+from . import (account, agent, backup, beej, bus, codecheck, coach, config, db, health, insights, khan, llm, lessons, monitor, notes, notices,
+               onboarding, planlog, planner, practice, profile, providers, seed, state, tests_eod, tracks, updates, xp)
+from .config import (APP_ROOT, COACH_MD, DATA_DIR, DB_PATH, FAKE_CLOCK, KINTSUGI, STUDY_REPO, has_api_key,
                      now, today)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -53,7 +53,7 @@ def _startup_backup() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.allow_default_db()
-    keys.load()
+    providers.migrate_legacy_key()
     bus.bind_loop(asyncio.get_running_loop())
     seed.seed_if_empty()
     backup.cleanup()
@@ -121,11 +121,11 @@ async def refused(_: Request, e: state.Refused):
 # ------------------------------------------------------------------ read
 @app.get("/api/meta")
 def meta():
-    return {"has_api_key": has_api_key(), "model": MODEL, "repo": str(STUDY_REPO), "start_date": config.start_date().isoformat(),
+    return {"has_api_key": has_api_key(), "model": _active_model(), "repo": str(STUDY_REPO), "start_date": config.start_date().isoformat(),
             "coach_name": coach.settings()["name"], "coach_avatar": _avatar_url(), "today": today().isoformat(), "now": now().isoformat(timespec="seconds"),
             "thresholds": profile.thresholds(), "warnings": health.warnings(), "fake_clock": FAKE_CLOCK,
             "plan": {"key": profile.key(), "ready": profile.ready(), "label": profile.active().get("label", ""),
-                     "modules": profile.modules()}, "key_source": keys.info()["source"]}
+                     "modules": profile.modules()}, "ai_primary": providers.primary()}
 
 
 def _avatar_url() -> str | None:
@@ -399,23 +399,25 @@ class ChatIn(BaseModel):
     text: str
     convo_id: int | None = None
     new: bool = False
+    exam: bool = False   # asked from a graded test that is open: closed book (see agent.closed_book)
 
 
-def _chat_checks(body: ChatIn) -> tuple[str, int]:
+def _chat_checks(body: ChatIn) -> tuple[str, int, bool]:
     if not has_api_key():
         raise state.Refused("The agent needs ANTHROPIC_API_KEY: add it to ctu-app/.env and restart the server.")
     text = body.text.strip()
     if not text:
         raise state.Refused("Empty message.")
-    return text[:4000], agent.prepare(body.convo_id, body.new)
+    closed = agent.closed_book(body.exam)
+    return text[:4000], agent.prepare(body.convo_id, body.new, closed), closed
 
 
 @app.post("/api/chat")
 async def chat_post(body: ChatIn):
     """Non-streaming fallback."""
-    text, cid = _chat_checks(body)
+    text, cid, closed = _chat_checks(body)
     try:
-        reply = await agent.chat(text, cid)
+        reply = await agent.chat(text, cid, closed)
     except Exception as e:
         raise HTTPException(502, f"Agent error: {e}")
     return {"reply": reply, "convo_id": cid}
@@ -423,10 +425,10 @@ async def chat_post(body: ChatIn):
 
 @app.post("/api/chat/stream")
 async def chat_stream(body: ChatIn):
-    text, cid = _chat_checks(body)
+    text, cid, closed = _chat_checks(body)
 
     async def gen():
-        async for ev in agent.chat_events(text, cid):
+        async for ev in agent.chat_events(text, cid, closed):
             yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream",
@@ -492,8 +494,7 @@ class NoteIn(BaseModel):
 
 def _coach_view():
     return {**coach.settings(), "memory": coach.memory(), "verbosity_labels": coach.VERBOSITY, "effort_labels": coach.EFFORTS,
-            "language_labels": coach.LANGUAGES, "model_options": coach.model_options(), "model_default": coach.default_model(),
-            "model_active": coach.chat_model(), "provider": coach.provider()}
+            "language_labels": coach.LANGUAGES, "model_active": coach.chat_model(), "provider": coach.provider()}
 
 
 @app.get("/api/coach")
@@ -636,6 +637,51 @@ def kintsugi_file(path: str):
     if KINTSUGI.resolve() not in p.parents or not p.is_file():
         raise HTTPException(404)
     return {"path": path, "content": p.read_text(errors="replace")}
+
+
+# Beej's Guide to C, read in the app (app/beej.py); fetched from beej.us once, then served from the cache
+def _beej(fn, *a):
+    try:
+        return fn(*a)
+    except beej.NotFound:
+        raise HTTPException(404)
+    except OSError as e:
+        raise state.Refused(f"Couldn't reach beej.us to load this chapter ({e}). It opens offline once it has loaded once.")
+
+
+@app.get("/api/beej/contents")
+def beej_contents():
+    return _beej(beej.contents)
+
+
+@app.get("/api/beej/page/{page}")
+def beej_page(page: str):
+    return _beej(beej.chapter, page)
+
+
+@app.post("/api/beej/page/{page}/short")
+async def beej_short(page: str, lang: str = "en"):
+    """The coach's short version of a chapter: a few points per section; the code stays Beej's. Written once."""
+    from . import llm
+    try:
+        return await beej.short(page, lang)
+    except beej.NotFound:
+        raise HTTPException(404)
+    except llm.NoKey:
+        raise state.Refused("The short version is written by the coach, and it needs an AI provider (Settings → AI providers). The full text works without one.")
+    except OSError as e:
+        raise state.Refused(f"Couldn't reach beej.us to load this chapter ({e}).")
+    except (RuntimeError, ValueError) as e:  # the model was busy, refused, or sent something unreadable
+        raise state.Refused(f"The short version couldn't be written: {e}")
+
+
+@app.get("/api/beej/asset/{name:path}")
+def beej_asset(name: str):
+    from fastapi.responses import Response
+    data = _beej(beej.asset, name)
+    ctype = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "svg": "image/svg+xml"}[name.rsplit(".", 1)[1]]
+    return Response(data, media_type=ctype, headers=_KHAN_FILE_HEADERS | {
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox"})
 
 
 class OpenIn(BaseModel):
@@ -859,28 +905,114 @@ async def onboarding_approve(body: ApproveIn):
     return out
 
 
-# ------------------------------------------------------------------ the user's own API key
+# ------------------------------------------------------------------ AI providers and their keys (app/providers.py)
 class KeyIn(BaseModel):
     key: str
 
 
-@app.get("/api/settings/key")
-def key_get():
-    return keys.info()
+class AiIn(BaseModel):
+    order: list[str] | None = None
+    fallback: bool | None = None
+    models: dict[str, dict[str, str]] | None = None
+    local_url: str | None = None
+    local_on: bool | None = None
 
 
-@app.put("/api/settings/key")
-async def key_put(body: KeyIn):
-    out = await keys.save(body.key)
+def _active_model() -> str:
+    pid = providers.primary()
+    try:
+        return providers.model(pid) if pid else ""
+    except providers.SetupError:
+        return ""
+
+
+def _provider(pid: str):
+    if pid not in providers.PROVIDERS:
+        raise HTTPException(404)
+    return providers.PROVIDERS[pid]
+
+
+def _refuse_setup(fn):
+    try:
+        return fn()
+    except providers.SetupError as e:
+        raise state.Refused(str(e))
+
+
+@app.get("/api/ai")
+def ai_get():
+    return providers.view()
+
+
+@app.put("/api/ai")
+def ai_put(body: AiIn):
+    _refuse_setup(lambda: providers.save_settings(body.order, body.fallback, body.models, body.local_url, body.local_on))
+    llm._clients.clear()
     bus.publish("meta", {})
-    return out
+    return providers.view()
 
 
-@app.delete("/api/settings/key")
-def key_delete():
-    out = keys.remove()
+@app.post("/api/ai/{pid}/keys")
+async def ai_key_add(pid: str, body: KeyIn):
+    """Check the key with the provider (it must be able to list models), then add it to the end of its .env line."""
+    p = _provider(pid)
+    k = body.key.strip()
+    if not k or len(k) > 400 or any(c in k for c in ",\n\r \t\"'#"):
+        raise state.Refused("That doesn't look like an API key (no spaces, commas or quotes).")
+    if k in providers.keys(pid):
+        raise state.Refused(f"That key is already saved for {p.label}.")
+    try:
+        found = await llm.list_models(pid, k)
+    except llm.CallError as e:
+        raise state.Refused(f"{p.label} didn't accept the key: {e}.")
+    except providers.SetupError as e:
+        raise state.Refused(str(e))
+    _refuse_setup(lambda: providers.add_key(pid, k))
+    providers.mark_ok(pid, k)
     bus.publish("meta", {})
-    return out
+    return {**providers.view(), "models_found": found}
+
+
+@app.delete("/api/ai/{pid}/keys/{index}")
+def ai_key_remove(pid: str, index: int):
+    _provider(pid)
+    _refuse_setup(lambda: providers.remove_key(pid, index))
+    bus.publish("meta", {})
+    return providers.view()
+
+
+@app.get("/api/ai/{pid}/models")
+async def ai_models(pid: str, fresh: bool = False):
+    """The models this provider offers (cards: id, name, context, free/price, chat), asked with its keys in turn until
+    one answers."""
+    p = _provider(pid)
+    errors = []
+    for k in (providers.try_order(pid) or [""]):
+        try:
+            return {"models": await llm.catalog(pid, k, fresh=fresh)}
+        except llm.CallError as e:
+            errors.append(f"{providers.hint(k) if k else 'no key'}: {e}")
+        except providers.SetupError as e:
+            raise state.Refused(str(e))
+    raise state.Refused(f"Couldn't get {p.label}'s model list (" + "; ".join(errors) + ").")
+
+
+@app.post("/api/ai/{pid}/test")
+async def ai_test(pid: str):
+    """Ask every key of this provider for a one-word reply; the result says, per key, whether it works and why not."""
+    p = _provider(pid)
+    model = _refuse_setup(lambda: providers.model(pid, "chat"))
+    out = []
+    for i, k in enumerate(providers.keys(pid) or ([""] if not p.needs_key else [])):
+        try:
+            await llm.ask_one(pid, k, model)
+            providers.mark_ok(pid, k)
+            out.append({"index": i, "hint": providers.hint(k) if k else "", "ok": True, "reason": ""})
+        except llm.CallError as e:
+            if k:
+                providers.mark_bad(k, e.kind, str(e))
+            out.append({"index": i, "hint": providers.hint(k) if k else "", "ok": False, "reason": str(e)})
+    return {"model": model, "results": out, **providers.view()}
 
 
 @app.get("/api/xp")
@@ -1133,6 +1265,47 @@ def notices_clear():
 def notices_delete(nid: int):
     notices.delete(nid)
     return {"ok": True}
+
+
+# ------------------------------------------------------------------ updates (the packaged program, app/updates.py)
+class UpdateVersion(BaseModel):
+    version: str
+
+
+class UpdateSettings(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/update")
+def update_view(fresh: bool = False):
+    """The update screen's question when the app opens: is there a newer release? (fresh: ask GitHub now)"""
+    return updates.check(force=fresh)
+
+
+@app.post("/api/update/apply")
+def update_apply():
+    try:
+        return updates.apply()
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from None
+
+
+@app.post("/api/update/later")
+def update_later(body: UpdateVersion):
+    updates.later(body.version)
+    return {"ok": True}
+
+
+@app.post("/api/update/skip")
+def update_skip(body: UpdateVersion):
+    updates.skip(body.version)
+    return {"ok": True}
+
+
+@app.put("/api/update/settings")
+def update_settings(body: UpdateSettings):
+    updates.set_enabled(body.enabled)
+    return updates.check()
 
 
 # ------------------------------------------------------------------ frontend

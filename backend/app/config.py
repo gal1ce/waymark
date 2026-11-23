@@ -9,30 +9,17 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from . import profile
+from .paths import APP_ROOT, FROZEN, HOME, LEGACY_DB, data_dir_for, env_file  # noqa: F401 (re-exported)
 
-APP_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(APP_ROOT / ".env")
+load_dotenv(env_file())
 
-HOME = Path.home()
 STUDY_REPO = Path(os.environ.get("CTU_STUDY_REPO", HOME / "quaimlres_road"))
 COACH_MD = Path(os.environ.get("CTU_COACH_MD", HOME / "Custom/Projects/ctu-plan/COACH.md"))
 KINTSUGI = Path(os.environ.get("CTU_KINTSUGI", HOME / "Custom/Projects/kintsugi"))
 PLAN_PDF_TEXT = APP_ROOT / "backend" / "data" / "plan.txt"
 # Where an install keeps what it records: the database, notebook pictures, the coach's and the user's pictures and the
 # automatic backups all sit in one data folder, outside the app's own files, so deleting or updating the app never takes
-# them. Installs from before the data folder keep their database where it is (backend/data/ctu.db).
-LEGACY_DB = APP_ROOT / "backend" / "data" / "ctu.db"
-
-
-def data_dir_for(env: dict, home: Path, legacy: Path, windows: bool) -> Path:
-    """The data folder: CTU_DATA_DIR, else an existing old install's folder, else the system's place for app data."""
-    if env.get("CTU_DATA_DIR"):
-        return Path(os.path.expanduser(env["CTU_DATA_DIR"]))
-    if legacy.is_file():
-        return legacy.parent
-    if windows:
-        return Path(env.get("APPDATA") or home / "AppData" / "Roaming") / "Waymark"
-    return Path(env.get("XDG_DATA_HOME") or home / ".local" / "share") / "waymark"
+# them. data_dir_for (app/paths.py) picks it; installs from before the data folder keep backend/data/ctu.db.
 
 
 DB_PATH = (Path(os.path.expanduser(os.environ["CTU_DB"])) if os.environ.get("CTU_DB")
@@ -46,7 +33,6 @@ KOLIBRI_HOME = Path(os.path.expanduser(os.environ.get("CTU_KOLIBRI_HOME", "") or
 KOLIBRI_BIN = os.path.expanduser(os.environ.get("CTU_KOLIBRI_BIN", ""))
 KOLIBRI_URL = os.environ.get("CTU_KOLIBRI_URL", "http://127.0.0.1:8726").rstrip("/")
 
-MODEL = os.environ.get("CTU_MODEL", "claude-sonnet-5-5")
 # The plan's first day and its study days come from the active plan (app/profile.py), read on every call: approving a
 # plan in onboarding takes effect without a restart.
 def start_date() -> date:
@@ -71,9 +57,9 @@ NO_HINT_BEFORE_MIN = 30
 
 
 def has_api_key() -> bool:
-    if os.environ.get("CTU_LLM") == "gemini":  # free test mode, see free_llm.py
-        return bool(os.environ.get("GEMINI_API_KEY"))
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+    """Some AI provider is set up (a key in .env, or the local model switched on). See app/providers.py."""
+    from . import providers
+    return providers.any_ready()
 
 
 # The fake clock (CTU_NOW) is for trying flows, never for real data: it only runs when the database, the

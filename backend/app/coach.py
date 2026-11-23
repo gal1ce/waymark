@@ -2,24 +2,16 @@
 Everything here is user style or data. It is always placed BELOW the core rules in the prompt."""
 from __future__ import annotations
 
-import os
 import re
 import secrets
 from pathlib import Path
 
-from . import db, free_llm, state
-from .config import DB_PATH, MODEL, today
+from . import db, providers, state
+from .config import DB_PATH, today
 
 DEFAULT = {"name": "Vega", "personality": "", "verbosity": 2, "effort": "low", "model": "", "language": "auto"}
 
-# Coach chat model. "" = the default below. Tests and planning don't use this; they keep
-# CTU_MODEL / CTU_FREE_MODEL. Precedence for the coach: the user's choice in Settings, then
-# CTU_COACH_MODEL, then a light per-provider default.
-FREE_MODELS = {"gemini-3.5-flash-lite": "Flash-Lite: fastest, fine for everyday questions.",
-               "gemini-3.5-flash": "Flash: smarter, slower; the free daily quota runs out sooner."}
-CLAUDE_MODELS = {"claude-haiku-5-5": "Haiku: fastest and cheapest.",
-                 "claude-sonnet-5-5": "Sonnet: smarter, slower."}
-LIGHT = {"free": "gemini-3.5-flash-lite", "claude": "claude-haiku-5-5"}
+# The coach's model is chosen per AI provider (Settings → AI providers, the coach model of each provider).
 # How long the model thinks before answering. Low is fastest; tests and planning keep their own settings.
 EFFORTS = {"low": "Fast: answers in seconds, fine for most questions.",
            "medium": "Balanced: thinks longer, better for tricky concepts.",
@@ -46,27 +38,19 @@ MAX_NOTES, MAX_NOTE, MAX_PERSONALITY, MAX_NAME = 50, 400, 1200, 32
 
 # ------------------------------------------------------------------ settings
 def provider() -> str:
-    return "free" if free_llm.enabled() else "claude"
-
-
-def model_options() -> dict[str, str]:
-    """Models the coach may use with the current provider, id → help text."""
-    opts = dict(FREE_MODELS if provider() == "free" else CLAUDE_MODELS)
-    tests = os.environ.get("CTU_FREE_MODEL", "gemini-3.5-flash") if provider() == "free" else MODEL
-    for m in (os.environ.get("CTU_COACH_MODEL"), tests):
-        if m and m not in opts:
-            opts[m] = "Set by environment variable."
-    return opts
-
-
-def default_model() -> str:
-    env = os.environ.get("CTU_COACH_MODEL")
-    return env if env in model_options() else LIGHT[provider()]
+    """The label of the provider the coach asks first ("" when none is set up)."""
+    p = providers.primary()
+    return providers.PROVIDERS[p].label if p else ""
 
 
 def chat_model() -> str:
-    m = settings()["model"]
-    return m if m in model_options() else default_model()
+    p = providers.primary()
+    if not p:
+        return ""
+    try:
+        return providers.model(p, "chat")
+    except providers.SetupError:
+        return ""
 
 
 def settings() -> dict:
@@ -140,9 +124,7 @@ def save_settings(name: str, personality: str, verbosity: int, effort: str = "lo
         raise state.Refused("Verbosity must be 1–5.")
     if effort not in EFFORTS:
         raise state.Refused("Effort must be low, medium or high.")
-    model = (model or "").strip()
-    if model and model not in model_options():
-        raise state.Refused("Unknown model for the current provider.")
+    model = ""  # chosen per provider now (Settings → AI providers)
     if language not in LANGUAGES:
         raise state.Refused("Language must be auto, tr or en.")
     db.kv_set("coach_settings", {"name": name, "personality": personality, "verbosity": verbosity, "effort": effort,
@@ -280,9 +262,14 @@ def create_convo(title: str = "") -> int:
                  (today().isoformat(), title.strip()[:80], db.ts(), db.ts()))
 
 
+# questions asked during a graded test live in a conversation of their own (agent.prepare)
+CLOSED_BOOK_TITLE = "Closed-book questions"
+
+
 def default_convo() -> int | None:
-    """Today's most recently used conversation, if any."""
-    r = db.q1("SELECT id FROM convos WHERE date=? ORDER BY updated_at DESC, id DESC LIMIT 1", (today().isoformat(),))
+    """Today's most recently used conversation, if any (not a test's closed-book one)."""
+    r = db.q1("SELECT id FROM convos WHERE date=? AND title!=? ORDER BY updated_at DESC, id DESC LIMIT 1",
+              (today().isoformat(), CLOSED_BOOK_TITLE))
     return r["id"] if r else None
 
 

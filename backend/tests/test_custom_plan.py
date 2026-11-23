@@ -14,7 +14,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-from app import (agent, db, keys, llm, main, onboarding, planlog, planner, profile, prompts, state, tests_eod, tracks)
+from app import (agent, db, llm, main, onboarding, planlog, planner, profile, prompts, state, tests_eod, tracks)
 from conftest import new_install, set_now
 
 H = {"x-ctu": "1"}
@@ -127,7 +127,7 @@ def test_a_new_install_plans_nothing_until_it_has_a_plan(client):
 def test_drafting_needs_the_users_key(client, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY")
     r = client.post("/api/onboarding/draft", json={"answers": ANSWERS}, headers=H)
-    assert r.status_code == 409 and "API key" in r.json()["error"]
+    assert r.status_code == 409 and "AI provider" in r.json()["error"]
 
 
 @pytest.mark.parametrize("bad, msg", [({"weekdays": []}, "study day"), ({"day_start": "9"}, "HH:MM"),
@@ -376,37 +376,6 @@ def test_the_cursor_walks_through_units_and_their_sessions():
                           "Series · study"]
     assert tracks.runway()[0]["left"] == 0
     assert any(t["kind"] == "review" for t in tracks.template_day(date(2026, 12, 2)).get("analysis", []))
-
-
-# ------------------------------------------------------------------ the user's own key
-def test_the_key_is_kept_in_the_data_folder_and_never_in_a_backup(fresh, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setattr(keys, "_from_app", False)
-
-    async def works(k):
-        return None if k == KEY else "Anthropic doesn't accept this key."
-    monkeypatch.setattr(keys, "_works", works)
-    c = TestClient(main.app, base_url="http://127.0.0.1:8723")
-    assert c.get("/api/settings/key").json()["set"] is False
-    assert c.put("/api/settings/key", json={"key": "nope"}, headers=H).status_code == 409
-    assert c.put("/api/settings/key", json={"key": "sk-ant-api03-" + "y" * 40}, headers=H).status_code == 409
-    r = c.put("/api/settings/key", json={"key": KEY}, headers=H)
-    assert r.status_code == 200 and r.json() == {"set": True, "source": "app", "hint": "…xxxx", "free_mode": False}
-    assert os.environ["ANTHROPIC_API_KEY"] == KEY
-    assert stat.S_IMODE(keys.path().stat().st_mode) == 0o600
-    z = zipfile.ZipFile(io.BytesIO(c.post("/api/backup/export", headers=H).content))
-    assert not any("key" in n for n in z.namelist())
-    assert all(KEY.encode() not in z.read(n) for n in z.namelist())
-    assert c.delete("/api/settings/key", headers=H).json()["set"] is False
-    assert not keys.path().exists() and "ANTHROPIC_API_KEY" not in os.environ
-
-
-def test_a_key_from_the_environment_is_left_alone(fresh, monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", KEY)
-    monkeypatch.setattr(keys, "_from_app", False)
-    c = TestClient(main.app, base_url="http://127.0.0.1:8723")
-    assert c.get("/api/settings/key").json()["source"] == "env"
-    assert c.delete("/api/settings/key", headers=H).status_code == 409
 
 
 def test_the_account_offers_the_computers_user_name(client):

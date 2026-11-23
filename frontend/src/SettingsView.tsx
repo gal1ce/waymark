@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import { ArchiveRestore, Download, FileText, HardDrive, KeyRound, Keyboard, ListChecks, MessageSquareText, Monitor, Moon, Palette, PencilLine, Stethoscope, Sun } from 'lucide-react'
+import { ArchiveRestore, Download, FileText, HardDrive, KeyRound, Keyboard, ListChecks, MessageSquareText, Monitor, Moon, Palette, PencilLine, RefreshCw, Stethoscope, Sun } from 'lucide-react'
 import type { Ctx } from './App'
 import { ACCENTS, DEFAULT_ACCENT, useAccent, type Side, type ThemePref } from './prefs'
 import { CoachSettingsView } from './Coach'
@@ -10,6 +10,7 @@ import { busyProps, useBusy } from './interact'
 import { useLoad } from './ui'
 import { ExamDates, KeyCard } from './Setup'
 import { ColorField } from './controls'
+import { UpdateSection } from './Update'
 
 const THEMES: { k: ThemePref; label: Key; note: Key; icon: ReactNode }[] = [
   { k: 'system', label: 'System', note: 'Follows this computer, switches with it', icon: <Monitor size={16} strokeWidth={1.6} /> },
@@ -32,11 +33,12 @@ const KEYS: [Key, [string, Key][]][] = [
 
 const SECTIONS: { id: string; label: Key; icon: ReactNode }[] = [
   { id: 'plan', label: 'Plan', icon: <ListChecks size={16} strokeWidth={1.6} /> },
-  { id: 'key', label: 'AI key', icon: <KeyRound size={16} strokeWidth={1.6} /> },
+  { id: 'key', label: 'AI providers', icon: <KeyRound size={16} strokeWidth={1.6} /> },
   { id: 'appearance', label: 'Appearance', icon: <Palette size={16} strokeWidth={1.6} /> },
   { id: 'coach', label: 'Coach', icon: <MessageSquareText size={16} strokeWidth={1.6} /> },
   { id: 'keys', label: 'Keyboard', icon: <Keyboard size={16} strokeWidth={1.6} /> },
   { id: 'data', label: 'Data', icon: <HardDrive size={16} strokeWidth={1.6} /> },
+  { id: 'updates', label: 'Updates', icon: <RefreshCw size={16} strokeWidth={1.6} /> },
   { id: 'health', label: 'System health', icon: <Stethoscope size={16} strokeWidth={1.6} /> },
 ]
 
@@ -60,7 +62,7 @@ export default function SettingsView({ ctx }: { ctx: Ctx }) {
             <PlanSection ctx={ctx} />
           </section>
           <section id="set-key" className="card sec">
-            <h2 className="sec-h">{tr('AI key')}</h2>
+            <h2 className="sec-h">{tr('AI providers')}</h2>
             <KeyCard ctx={ctx} />
           </section>
           <section id="set-appearance" className="card sec">
@@ -128,6 +130,10 @@ export default function SettingsView({ ctx }: { ctx: Ctx }) {
           <section id="set-data" className="card sec">
             <h2 className="sec-h">{tr('Data')}</h2>
             <DataSection ctx={ctx} />
+          </section>
+          <section id="set-updates" className="card sec">
+            <h2 className="sec-h">{tr('Updates')}</h2>
+            <UpdateSection onShow={ctx.showUpdate} />
           </section>
           <section id="set-health">
             <HealthPanel ctx={ctx} />

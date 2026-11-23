@@ -92,6 +92,40 @@ API: `GET /api/plan`, `GET /api/onboarding`, `POST /api/onboarding/draft`, `/cha
 
 ## Giving it to a friend
 
+The easy way is the packaged program: one file per system, nothing else to install. Push a version tag and GitHub
+Actions builds it on Linux, Windows and macOS and puts the files on the repo's Releases page:
+
+```bash
+git tag v2026.11.23 && git push origin v2026.11.23    # .github/workflows/release.yml
+packaging/build.sh                                     # or: build for this computer only, into packages/
+```
+
+| System | File | Start |
+|---|---|---|
+| Windows | `Waymark-<version>-windows.exe` | double-click (unsigned: *More info → Run anyway* the first time) |
+| macOS | `Waymark-<version>-macos-arm64.dmg` / `-x86_64.dmg` | drag to Applications; the first time *System Settings → Privacy & Security → Open Anyway* |
+| Linux | `waymark-<version>-linux-x86_64` | `chmod +x`, start; it adds itself to the applications menu |
+
+It starts the server on this computer and opens it in the browser; starting it again while it runs only opens a tab
+(on macOS: click the Dock icon; *Quit* in the Dock stops it). With no tab open for 15 minutes it stops by itself.
+Inside is `backend/app` (PyInstaller, `packaging/waymark.spec`), the built UI and the icon; the start is
+`backend/app/launcher.py`. The data folder is the same as below; the AI keys' `.env` is in the data folder too, since
+the program's own files may be read-only. Its log is `waymark.log` there. `packaging/build.sh` starts each build once
+on an empty data folder (`--smoke-test`) and fails if the API or the page doesn't answer.
+
+**Updates.** The packaged program carries its version (`version.txt`, written by `build.sh`). When the app is opened it
+asks GitHub for the latest release (`backend/app/updates.py`, at most every 6 hours, switchable in Settings → Updates);
+a newer one brings up the update screen (`frontend/src/Update.tsx`): update now, download it yourself, not now, skip
+this version. Updating downloads the file for this system, checks its size and the SHA-256 GitHub lists, swaps it in
+for the running program (Linux: replaced in place; Windows: the running `.exe` renamed to `.old`; macOS: the `.dmg`
+mounted and the `.app` swapped), and starts the new one with `--after-update PORT`, which waits for the port and takes
+it over; the tab reloads into it. The screen shows the release notes up to an `<!-- install -->` line, which the release
+workflow writes from the tag's message, so tag with a message: `git tag -a v2026.12.1 -m "- What changed"`.
+`CTU_UPDATE_FEED=<url>` points the check at another address (a local release JSON, to try a whole update), and
+`CTU_UPDATE_CURRENT=<version>` makes a source checkout pretend to be that version to see the screen.
+
+The older way, a folder that needs uv:
+
 ```bash
 ./package.sh              # packages/waymark-YYYY.MM.DD.tar.gz and .zip
 ```
@@ -134,9 +168,8 @@ Khan's videos, exercises and unit tests run inside the app; you don't go to khan
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | (empty) | Needed for the coach, model-written plans and tests. `ANTHROPIC_AUTH_TOKEN` also works |
-| `CTU_MODEL` | `claude-sonnet-5-5` | Model for planning and tests |
-| `CTU_COACH_MODEL` | `claude-haiku-5-5` | Default coach chat model. It can also be changed in coach settings |
+| `ANTHROPIC_API_KEYS`, `OPENAI_API_KEYS`, `OPENROUTER_API_KEYS`, `GROQ_API_KEYS`, `GEMINI_API_KEYS`, `LOCAL_LLM_API_KEYS` | (empty) | AI keys, several per provider, comma separated. The singular names (`GROQ_API_KEY`) are read too. Settings → AI providers adds and removes them here; models, the provider order and moving on to the next provider are chosen there too (defaults are in `backend/app/providers.py`) |
+| `ANTHROPIC_WORKSPACE_ID` | (empty) | Only for an Anthropic key that isn't scoped to a workspace |
 | `CTU_STUDY_REPO` | `~/quaimlres_road` | Study repo: watched, compiled, PROGRESS.md and math log |
 | `CTU_COACH_MD` | `~/Custom/Projects/ctu-plan/COACH.md` | Coach file |
 | `CTU_KINTSUGI` | `~/Custom/Projects/kintsugi` | Kintsugi source for the in-app reader (read only) |
@@ -146,7 +179,6 @@ Khan's videos, exercises and unit tests run inside the app; you don't go to khan
 | `CTU_KOLIBRI_BIN` | `kolibri` on `PATH` | The `kolibri` command, if it isn't on `PATH` |
 | `CTU_KOLIBRI_URL` | `http://127.0.0.1:8726` | Kolibri's own player (questions the app can't show) |
 | `CTU_NOW` | (empty) | Fake clock for testing. Only accepted together with `CTU_DB`, `CTU_STUDY_REPO` and `CTU_COACH_MD`; use `./demo.sh` |
-| `CTU_LLM`, `GEMINI_API_KEY`, `CTU_FREE_MODEL` | (empty) | `CTU_LLM=gemini` is a free test mode through Gemini. Use it to try the flows without credits; the real path is Anthropic |
 | `PORT` | `8723` | Port for `run.sh` (environment variable, not read from `.env`) |
 
 `.env` is git-ignored. Never commit it.

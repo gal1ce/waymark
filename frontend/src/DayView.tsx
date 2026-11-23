@@ -8,12 +8,14 @@ import {
 } from 'lucide-react'
 import { addDays, api, blockTitle, canPeek, fmtDate, fmtDur, fmtMin, toMin, weekday, weekNo, type Block, type CloseItem, type Day, type OutlineBlock, type Stuck, type Task } from './api'
 import type { Ctx } from './App'
+import { beejPage } from './BeejPage'
 import { t as tr, tx } from './i18n'
 import { stuckDetail, stuckSummary } from './stuck'
 import { bumpXp } from './prefs'
 import { BLOCK_LABEL, KIND_LABEL, PageHead, ScoreBar, Section, SOURCE_LABEL, useFold } from './ui'
 import { busyProps, useBusy, useShake } from './interact'
 import { KhanTestLauncher, KhanUnitPanel } from './Khan'
+import { Fold } from './Fold'
 import { CoachMd } from './Coach'
 import { fixMathInMd } from './mathtex'
 
@@ -73,7 +75,7 @@ export default function DayView({ date, ctx }: { date: string; ctx: Ctx }) {
   const shownN = rows.reduce((a, r) => a + r.tasks.length, 0)
 
   return (
-    <div className="page">
+    <div className="page wide">
       <PageHead
         title={`${weekday(day.date)}, ${fmtDate(day.date)}`}
         sub={<>{tr('Week {n}', { n: weekNo(day.week) })} · {st}{ver && <> · <span className="ver" title={verWhy}>{ver}</span></>}</>}
@@ -100,8 +102,9 @@ export default function DayView({ date, ctx }: { date: string; ctx: Ctx }) {
         {day.status === 'locked' && day.outline && day.outline.length > 0 && <Outline items={day.outline} />}
       </>) : (
         <>
-          <Ruler day={day} blocks={blocks} />
+          {/* what to do now comes first; the day's timeline and its tasks follow */}
           {active && <Current task={current} next={next} live={live} ctx={ctx} />}
+          <Ruler day={day} blocks={blocks} />
           <div className="day-grid">
             <div className="timeline">
               <div className="tl-tools">
@@ -439,7 +442,7 @@ function TaskRow({ t, day, live, ctx }: { t: Task; day: Day; live: (t: Task) => 
   const compileFail = t.compile?.type === 'compile_fail'
   const skipped = t.status === 'done' && t.meta.skipped && typeof t.meta.skipped === 'object' ? t.meta.skipped as { percent?: number } : null
   const isTest = t.kind === 'test' || t.kind === 'c_quiz' || t.kind === 'unit_quiz'  // its main action is preparing the test
-  const quietStart = isTest || t.kind === 'khan_test'      // the unit test button is the main action there
+  const quietStart = isTest || t.kind === 'khan_test' || t.kind === 'khan_study'   // the unit test button / the unit's next step is the main action there
   const [busy, run] = useBusy()
   const [which, setWhich] = useState('')
   const act = (a: 'start' | 'pause' | 'done' | 'reopen') => {
@@ -470,7 +473,10 @@ function TaskRow({ t, day, live, ctx }: { t: Task; day: Day; live: (t: Task) => 
       {open && (
         <div className="task-body">
           {skipped && <div className="skip-note"><Check size={14} strokeWidth={2} />{tr('Not needed today: you passed the unit test ({n}%). The lessons stay here if you want to review.', { n: skipped.percent ?? '' })}</div>}
-          {t.detail && <div className="md"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{fixMathInMd(t.detail)}</Markdown></div>}
+          {/* a Khan unit is worked in its panel below; the how-to above it is reference once read, so it folds */}
+          {t.detail && (t.kind === 'khan_study'
+            ? <Fold title={tr('How this task works')} remember="khan-study-how"><div className="md"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{fixMathInMd(t.detail)}</Markdown></div></Fold>
+            : <div className="md"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{fixMathInMd(t.detail)}</Markdown></div>)}
           {typeof t.meta.lesson === 'string' && (
             <details className="lesson" open>
               <summary>{tr('Lesson: {u}', { u: t.title.split(' · ')[0] })}</summary>
@@ -555,6 +561,8 @@ function Resources({ task, ctx, inline }: { task: Task; ctx: Ctx; inline?: boole
   return (
     <div className={'res' + (inline ? ' inline' : '')}>
       {task.resources.map((r, i) => {
+        const bj = r.kind === 'url' ? beejPage(r.href) : null
+        if (bj) return <button key={i} onClick={() => ctx.go({ kind: 'beej', ...bj })}><BookOpen size={13} strokeWidth={1.5} />{r.label}</button>
         if (r.kind === 'url') return <a key={i} href={r.href} target="_blank" rel="noreferrer"><ExternalLink size={13} strokeWidth={1.5} />{r.label}</a>
         if (r.kind === 'kintsugi') return <button key={i} onClick={() => ctx.openReader(r.path!)}><FileCode2 size={13} strokeWidth={1.5} />{r.label}</button>
         if (r.kind === 'ref') return <span key={i} className="res-ref"><BookMarked size={13} strokeWidth={1.5} />{r.label}</span>

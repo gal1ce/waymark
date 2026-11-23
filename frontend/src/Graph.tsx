@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { CircleAlert, Crosshair, Minus, Palette, Pencil, Plus, X } from 'lucide-react'
 import type { GraphFn, GraphLook, GraphView } from './api'
 import { t } from './i18n'
-import { fmtTick, fmtVal, labelHtml, lineTex, niceStep, PLOT_COLORS, readAll, splitLine, type Anchor, type Plot, type Read } from './graph'
+import { fmtTick, fmtVal, labelHtml, lineTex, niceStep, PLOT_COLORS, readAll, splitLine, type Anchor, type Plot, type Read } from './graphcore'
 import { Slider } from './controls'
 
 export const DEFAULT_VIEW: GraphView = { x0: -10, x1: 10, y0: -6, y1: 6 }

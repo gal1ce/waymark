@@ -1,0 +1,85 @@
+# Builds the packaged program on Linux, Windows and macOS (packaging/build.sh) and, for a version tag, puts the files
+# on the GitHub release. Start a release with an annotated tag; its message is what the app's update screen shows
+# under "What's new" (Markdown: "- " lines become a list):
+#   git tag -a v2026.12.1 -m "- Faster tests" -m "- Notes open where you left them"
+#   git push origin v2026.12.1
+# Versions are dates (vYYYY.MM.DD, a second one that day vYYYY.MM.DD.2): the app compares them as numbers.
+# A pull request (and "Run workflow" on the Actions page) builds the same files without a release, so a change that
+# breaks the build on one system shows before a version is tagged; the files are under the run's artifacts.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04      # the oldest supported glibc, so the binary also runs on older distributions
+          - os: windows-latest
+          - os: macos-latest      # Apple silicon
+          - os: macos-15-intel    # Intel Macs
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+      - name: Build
+        run: packaging/build.sh "${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: waymark-${{ matrix.os }}
+          path: packages/*
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git fetch --force origin "refs/tags/${{ github.ref_name }}:refs/tags/${{ github.ref_name }}"
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ls -la dist
+          # what changed (the tag's message) first: the update screen shows the part before <!-- install -->
+          git for-each-ref "refs/tags/$TAG" --format='%(contents)' | sed '/^-----BEGIN PGP/,$d' > notes.md
+          cat >> notes.md <<'NOTES'
+
+          <!-- install -->
+          **Download the file for your computer:**
+
+          - **Windows:** `Waymark-…-windows.exe`. Double-click it. Windows may say *Windows protected your PC*: click *More info* → *Run anyway* (the app isn't signed).
+          - **Mac (M1 and newer):** `…-macos-arm64.dmg` · **Intel Mac:** `…-macos-x86_64.dmg`. Open it, drag Waymark to Applications, start it. The first time macOS refuses it (the app isn't signed): *System Settings → Privacy & Security*, scroll down, *Open Anyway*.
+          - **Linux:** `waymark-…-linux-x86_64`. Make it executable (`chmod +x`), start it. It adds itself to the applications menu.
+
+          It opens in your browser. Close the tabs and it stops on its own after 15 minutes. Already have Waymark? It tells you about this version when you open it and updates itself.
+          NOTES
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Waymark $TAG" --notes-file notes.md

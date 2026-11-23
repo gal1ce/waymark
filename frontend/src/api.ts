@@ -1,6 +1,14 @@
 import { dayName, dayShort, fmtDay, MONTHS, tx, unit } from './i18n'
 /** url: a link; repo: a path in the study repo; kintsugi: a file in the reader; ref: a named source without a link */
 export type Resource = { label: string; kind: 'url' | 'repo' | 'kintsugi' | 'ref'; href?: string; path?: string }
+/** a chapter of Beej's Guide to C, cleaned for the in-app reader (backend app/beej.py) */
+export type BeejChapter = {
+  page: string; num: string; title: string; source: string; prev: string | null; next: string | null
+  blocks: ({ type: 'html'; html: string } | { type: 'code'; lang: string; code: string })[]
+  sections: { id: string; num: string; title: string; level: number }[]
+  notes: { id: string; n: string; html: string }[]
+}
+export type BeejShort = { sections: { id: string; points: string[] }[]; missing: string[] }
 export type Compile = { type: 'compile_ok' | 'compile_fail'; ts: string; data: { file: string; stderr: string } } | null
 export type Task = {
   id: number; date: string; block_id: number; title: string; detail: string; kind: string; learning: number
@@ -30,7 +38,7 @@ export type Warning = { message: string; ts: string }
 /** key: 'ctu' (the built-in CTU plan), 'custom' (an approved plan of the user's own) or null (not set up yet) */
 export type PlanInfo = { key: 'ctu' | 'custom' | null; ready: boolean; label: string; modules: string[] }
 export type Meta = { has_api_key: boolean; coach_name?: string; coach_avatar?: string | null; model: string; repo: string; start_date: string; today: string; now: string; warnings?: Record<string, Warning>; fake_clock?: boolean
-  plan: PlanInfo; key_source: 'app' | 'env' | null }
+  plan: PlanInfo; ai_primary: string | null }
 export type CloseItem = { key: string; ok: boolean; label: string; optional?: boolean }
 export type CloseJob = { pending: string[]; errors: Record<string, string>; attempts: number; last_try: string | null }
 export type Health = {
@@ -66,7 +74,7 @@ export type Convo = { id: number; date: string; title: string; created_at: strin
 export type MemoryNote = { id: number; text: string; created_at: string; updated_at: string }
 export type Effort = 'low' | 'medium' | 'high'
 export type ReplyLanguage = 'auto' | 'tr' | 'en'
-export type CoachSettings = { name: string; personality: string; verbosity: number; effort: Effort; model: string; language: ReplyLanguage; memory: MemoryNote[]; verbosity_labels: Record<string, string>; effort_labels: Record<Effort, string>; language_labels: Record<ReplyLanguage, string>; model_options: Record<string, string>; model_default: string; model_active: string; provider: 'free' | 'claude' }
+export type CoachSettings = { name: string; personality: string; verbosity: number; effort: Effort; model: string; language: ReplyLanguage; memory: MemoryNote[]; verbosity_labels: Record<string, string>; effort_labels: Record<Effort, string>; language_labels: Record<ReplyLanguage, string>; model_active: string; provider: string }
 export type StreamEv =
   | { type: 'start'; convo_id: number; user_id: number }
   | { type: 'status'; phase: 'thinking' | 'tool' | 'running'; tool?: string; label?: string }
@@ -75,7 +83,8 @@ export type StreamEv =
   | { type: 'replace'; text: string }
   | { type: 'done'; reply: string; id: number; convo_id: number }
   | { type: 'error'; message: string }
-export type ChatBody = { text: string; convo_id?: number | null; new?: boolean }
+/** exam: asked from a graded test that is open; the server answers closed book (rules and formulas, not answers) */
+export type ChatBody = { text: string; convo_id?: number | null; new?: boolean; exam?: boolean }
 
 export type Dashboard = {
   streak: number; best_streak: number; week: number; week_minutes: number; week_target_min: number
@@ -166,7 +175,14 @@ export type Onboarding = {
 }
 export type PlanView = DraftPlan & { projected_end?: string | null; key: PlanInfo['key']; ready: boolean; engine: string | null; modules: string[]
   approved_at: string | null; plan_md: string | null; progress: PlanProgress[] }
-export type KeyInfo = { set: boolean; source: 'app' | 'env' | null; hint: string; free_mode: boolean }
+export type AiKey = { index: number; hint: string; ok: boolean | null; reason: string; resting: boolean }
+export type AiProvider = {
+  id: string; label: string; note: string; keys_url: string; needs_key: boolean; env: string; ready: boolean; primary: boolean
+  keys: AiKey[]; models: { main: string; chat: string }; default_models: { main: string; chat: string }; base: string
+}
+export type AiModel = { id: string; name: string; context: number; free: boolean; price: string; chat: boolean; created: number }
+export type AiView = { providers: AiProvider[]; fallback: boolean; local_url: string; local_on: boolean; primary: string | null; env_file: string }
+export type AiPut = { order?: string[]; fallback?: boolean; models?: Record<string, Partial<{ main: string; chat: string }>>; local_url?: string; local_on?: boolean }
 
 // Khan content (Kolibri): unit outline, videos, exercises in Perseus format, the in-app unit test
 export type KhanProgress = { m: number; n: number; last: number[]; mastered: boolean; mastered_at?: string | null }
@@ -187,16 +203,18 @@ export type PWidget = { type: string } & Record<string, unknown>
 export type PContent = { content: string; widgets: Record<string, PWidget>; graphie: string[] }
 export type PAnswer = string | number | number[]
 export type PAnswers = Record<string, PAnswer>
-export type PFeedback = { correct: boolean; widgets: Record<string, { correct: boolean; message: string }> }
+export type PFeedback = { correct: boolean; widgets: Record<string, { correct: boolean; message: string; right?: number[] }> }
+/** The right answer per widget, as markdown: a list for a choose-all question (one entry per right choice). */
+export type PSolution = Record<string, string | string[]>
 export type KhanQuestion = { exercise_id: string; item_id: string; title: string; question: PContent; hints_total: number
   hints: PContent[]; counted: boolean; progress: KhanProgress }
-export type KhanCheck = PFeedback & { progress: KhanProgress; solution: Record<string, string> | null }
+export type KhanCheck = PFeedback & { progress: KhanProgress; solution: PSolution | null }
 export type KhanTest = {
   id: number; date: string; task_id: number; status: 'in_progress' | 'submitted'; score: number | null; threshold: number
   unit: { idx: number; name: string; course: string }
   questions: { key: string; exercise: string; question?: PContent; hints?: PContent[]; missing?: boolean }[]
   answers: Record<string, PAnswers>
-  results: Record<string, PFeedback & { solution: Record<string, string> }> | null
+  results: Record<string, PFeedback & { solution: PSolution }> | null
 }
 
 // XP: derived on the server from recorded work (tasks, Khan answers, tests, closed days)
@@ -234,7 +252,7 @@ export type DocBlock = { id: string } & BlockLayout & (
   | ({ type: 'text'; md: string } & TextStyle)
   | ({ type: 'graph'; fns: GraphFn[]; view?: GraphView; look?: GraphLook } & FigBox)
   | ({ type: 'image'; src: string; caption?: string; fit?: Fit } & FigBox)
-  /** a drawing written line by line (diagram.ts), seen from `cam` (azimuth and elevation in degrees) */
+  /** a drawing written line by line (diagramcore.ts), seen from `cam` (azimuth and elevation in degrees) */
   | ({ type: 'diagram'; src: string; cam?: { az: number; el: number } } & FigBox)
   | ({ type: 'canvas'; height?: number } & Board))
 /** Where a picture or graph sits on a page: its size in page pixels, and either a preset alignment or a left offset
@@ -262,6 +280,14 @@ export type NotePageFull = NotePage & { body: PageBody }
 
 export class ApiError extends Error {}
 
+/** The packaged program's update state (backend/app/updates.py). */
+export type UpdateJob = { phase: 'idle' | 'downloading' | 'installing' | 'restarting' | 'failed'; done?: number; total?: number; error?: string | null; version?: string }
+export type UpdateInfo = {
+  current: string; packaged: boolean; enabled: boolean; available: boolean; show: boolean; checked?: string; error?: string
+  latest: { version: string; notes: string; page: string; published: string } | null
+  asset?: { name: string; size: number; url: string } | null; self_update?: boolean; reason?: string | null; job: UpdateJob
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   // X-CTU: the server refuses state changes without it, so other web pages can't drive the API
   const r = await fetch('/api' + path, {
@@ -283,6 +309,11 @@ export const api = {
   profile: () => req<Profile>('GET', '/profile'),
   saveGoals: (goals: Goal[]) => req<{ goals: Goal[] }>('PUT', '/goals', { goals }),
   meta: () => req<Meta>('GET', '/meta'),
+  update: (fresh = false) => req<UpdateInfo>('GET', `/update${fresh ? '?fresh=1' : ''}`),
+  updateApply: () => req<UpdateJob>('POST', '/update/apply'),
+  updateLater: (version: string) => req<{ ok: boolean }>('POST', '/update/later', { version }),
+  updateSkip: (version: string) => req<{ ok: boolean }>('POST', '/update/skip', { version }),
+  updateSettings: (enabled: boolean) => req<UpdateInfo>('PUT', '/update/settings', { enabled }),
   overview: () => req<Overview>('GET', '/overview'),
   today: () => req<Day>('GET', '/today'),
   day: (ds: string) => req<Day>('GET', `/day/${ds}`),
@@ -319,9 +350,12 @@ export const api = {
   changeDraft: (change: string) => req<Onboarding>('POST', '/onboarding/change', { change }),
   discardDraft: () => req<Onboarding>('POST', '/onboarding/discard'),
   approvePlan: () => req<Onboarding>('POST', '/onboarding/approve', { confirm: true }),
-  keyInfo: () => req<KeyInfo>('GET', '/settings/key'),
-  saveKey: (key: string) => req<KeyInfo>('PUT', '/settings/key', { key }),
-  removeKey: () => req<KeyInfo>('DELETE', '/settings/key'),
+  ai: () => req<AiView>('GET', '/ai'),
+  aiPut: (b: AiPut) => req<AiView>('PUT', '/ai', b),
+  aiAddKey: (pid: string, key: string) => req<AiView & { models_found: string[] }>('POST', `/ai/${pid}/keys`, { key }),
+  aiRemoveKey: (pid: string, i: number) => req<AiView>('DELETE', `/ai/${pid}/keys/${i}`),
+  aiModels: (pid: string, fresh = false) => req<{ models: AiModel[] }>('GET', `/ai/${pid}/models${fresh ? '?fresh=1' : ''}`),
+  aiTest: (pid: string) => req<AiView & { model: string; results: { index: number; hint: string; ok: boolean; reason: string }[] }>('POST', `/ai/${pid}/test`, {}),
   genTest: (kind: 'eod' | 'c_quiz' | 'unit_quiz', task_id?: number) => req<{ id: number }>('POST', '/tests/generate', { kind, task_id }),
   explainNow: (taskId: number) => req<{ ok: boolean; explain_early: number }>('POST', `/tasks/${taskId}/explain-now`),
   lesson: (taskId: number) => req<{ lesson: string }>('POST', `/tasks/${taskId}/lesson`),
@@ -336,6 +370,9 @@ export const api = {
   exitTest: (id: number, answers: Record<string, string>) => req<Test>('POST', `/tests/${id}/exit`, { answers }),
   kintsugi: (path: string) => req<{ path: string; content: string }>('GET', `/kintsugi/file?path=${encodeURIComponent(path)}`),
   open: (path: string) => req<{ opened: string; exists: boolean }>('POST', '/open', { path }),
+  beejPage: (page: string) => req<BeejChapter>('GET', `/beej/page/${encodeURIComponent(page)}`),
+  beejShort: (page: string, lang: string) => req<BeejShort>('POST', `/beej/page/${encodeURIComponent(page)}/short?lang=${lang}`, {}),
+  beejContents: () => req<{ page: string; num: string; title: string }[]>('GET', '/beej/contents'),
   khanStatus: () => req<KhanStatus>('GET', '/khan/status'),
   khanUnit: (idx: number) => req<KhanOutline>('GET', `/khan/unit/${idx}`),
   khanDownload: (idx: number) => req<KhanStatus>('POST', `/khan/unit/${idx}/download`),
@@ -343,7 +380,7 @@ export const api = {
   khanExercise: (id: string) => req<KhanQuestion>('GET', `/khan/exercise/${id}`),
   khanCheck: (id: string, item_id: string, answers: PAnswers) => req<KhanCheck>('POST', `/khan/exercise/${id}/check`, { item_id, answers }),
   khanHint: (id: string, item_id: string) => req<{ hints: PContent[]; hints_total: number }>('POST', `/khan/exercise/${id}/hint`, { item_id }),
-  khanReveal: (id: string, item_id: string) => req<{ hints: PContent[]; solution: Record<string, string>; progress: KhanProgress }>('POST', `/khan/exercise/${id}/reveal`, { item_id }),
+  khanReveal: (id: string, item_id: string) => req<{ hints: PContent[]; solution: PSolution; progress: KhanProgress }>('POST', `/khan/exercise/${id}/reveal`, { item_id }),
   khanStartTest: (task_id: number) => req<{ id: number }>('POST', '/khan/tests', { task_id }),
   khanTest: (id: number) => req<KhanTest>('GET', `/khan/tests/${id}`),
   khanSaveTest: (id: number, answers: Record<string, PAnswers>) => req('PUT', `/khan/tests/${id}/answers`, { answers }),

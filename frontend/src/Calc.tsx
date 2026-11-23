@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useDrag } from './drag'
 import { createPortal } from 'react-dom'
 import { Calculator as CalcIcon, Delete, GripHorizontal, X } from 'lucide-react'
 import { t as tr } from './i18n'
@@ -164,7 +165,7 @@ function Calculator({ onClose }: { onClose: () => void }) {
   const input = useRef<HTMLInputElement>(null)
   const log = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(() => { try { return JSON.parse(localStorage.getItem(POS_KEY) ?? 'null') } catch { return null } })
+  const { pos, start } = useDrag(POS_KEY)
 
   useEffect(() => { if (window.matchMedia('(pointer: fine)').matches) input.current?.focus() }, [])
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight }) }, [lines.length])
@@ -192,24 +193,12 @@ function Calculator({ onClose }: { onClose: () => void }) {
     requestAnimationFrame(() => { el?.focus({ preventScroll: true }); el?.setSelectionRange(a + ins.length, a + ins.length) })
   }
 
-  const drag = (e: React.PointerEvent) => {
-    const r = box.current!.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top
-    const move = (ev: PointerEvent) => setPos({
-      x: Math.max(8, Math.min(window.innerWidth - r.width - 8, ev.clientX - dx)),
-      y: Math.max(8, Math.min(window.innerHeight - 60, ev.clientY - dy)),
-    })
-    const up = () => {
-      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up)
-      setPos((p) => { try { localStorage.setItem(POS_KEY, JSON.stringify(p)) } catch { /* only a preference */ } return p })
-    }
-    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
-  }
   const place = pos && pos.x < window.innerWidth - 120 && pos.y < window.innerHeight - 60 ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined
 
   return (
     <div className="calc" ref={box} role="dialog" aria-label={tr('Calculator')} style={place}
       onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}>
-      <div className="calc-head" onPointerDown={(e) => { if (!(e.target as HTMLElement).closest('button')) drag(e) }}>
+      <div className="calc-head" onPointerDown={(e) => start(e, box.current)}>
         <GripHorizontal size={14} strokeWidth={1.6} className="calc-grip" />
         <span className="calc-t">{tr('Calculator')}</span>
         {lines.length > 0 && <button className="mini" onClick={() => { setLines([]); ans.current = null }}>{tr('Clear')}</button>}
