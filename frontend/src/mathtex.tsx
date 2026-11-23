@@ -18,7 +18,15 @@ function tex(src: string, displayMode: boolean): string {
 const BARE = /(^|[^\\a-zA-Z])(varepsilon|epsilon|vartheta|theta|lambda|Lambda|alpha|beta|gamma|Gamma|delta|Delta|sigma|Sigma|omega|Omega|varphi|infty|partial|nabla|sqrt(?=\{)|frac(?=\{)|cdot|times|leq|geq|neq|approx|lim(?=_)|sum(?=_)|int(?=_))(?![a-zA-Z])/g
 export const fixCommands = (src: string) => src.split(/(\\text\{[^}]*\})/).map((x, i) => (i % 2 ? x : x.replace(BARE, '$1\\$2'))).join('')
 /** The same repair for Markdown: only inside $…$ and $$…$$, never in the prose around them. */
-export const fixMathInMd = (md: string) => md.replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, (m) => fixCommands(m))
+export const fixMathInMd = (md: string) => texDelims(md).replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, (m) => fixCommands(m))
+
+/** LaTeX's other delimiters for Markdown, which only knows $…$ and $$…$$: \(x\) → $x$, \[x\] → $$x$$, and a
+ *  doubled $\(x\)$ loses the inner pair (KaTeX has no \( command, so it showed the whole formula as red source).
+ *  Code (``` blocks and `spans`) is left alone. */
+export const texDelims = (md: string) => md.split(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)/).map((part, i) => i % 2 ? part : part
+  .replace(/(\$\$?)\s*\\[([]([\s\S]*?)\\[)\]]\s*\1/g, '$1$2$1')
+  .replace(/\\\[([\s\S]+?)\\\]/g, (_, x: string) => `$$${x}$$`)
+  .replace(/\\\(([^\n]+?)\\\)/g, (_, x: string) => `$${x.trim()}$`)).join('')
 
 /** Plain-text math → LaTeX. Anything that already has a LaTeX command is returned as is. */
 function toTex(src: string): string {

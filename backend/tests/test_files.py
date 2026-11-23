@@ -133,3 +133,18 @@ def test_notes_after_close_reach_progress(seeded):
     state.set_day_notes("2026-11-23", "rewritten")
     text = (ROOT / "repo" / "PROGRESS.md").read_text()
     assert "rewritten" in text and "late thought" not in text
+
+
+def test_passed_unit_test_ticks_off_the_study_task(seeded):
+    set_now("2026-11-23T10:30")
+    test = db.q1("SELECT id FROM tasks WHERE date='2026-11-23' AND kind='khan_test'")
+    study = "SELECT status, meta FROM tasks WHERE date='2026-11-23' AND title LIKE '%lessons + exercises'"
+    math2 = "SELECT status FROM tasks WHERE date='2026-11-23' AND title='Math II · continue'"
+    r = state.record_khan_score(test["id"], 90)
+    assert r["passed"] and "isn't needed" in r["message"]
+    s = db.decode(db.q1(study))
+    assert s["status"] == "done" and s["meta"]["skipped"]["percent"] == 90
+    assert db.q1(math2)["status"] == "todo"          # the next unit's work is not touched
+    state.record_khan_score(test["id"], 70)           # a retake below the threshold needs the lessons after all
+    s = db.decode(db.q1(study))
+    assert s["status"] == "todo" and "skipped" not in s["meta"]

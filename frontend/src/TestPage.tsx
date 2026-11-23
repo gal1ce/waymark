@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CalcTool } from './Calc'
 import { Ban, Check, ChevronLeft, ChevronRight, ClipboardCheck, Flag, RefreshCw, Send, Timer, X } from 'lucide-react'
 import { api, fmtDate, fmtDur, fmtMin, type Test } from './api'
 import type { Ctx } from './App'
@@ -248,6 +249,7 @@ export default function TestPage({ id, ctx, version }: { id: number; ctx: Ctx; v
       <SheetFrame title={title} step={tr('Question {a} of {b}', { a: ci + 1, b: n })} progress={done / n} onClose={exitTest} closeLabel={tr('Pause and leave (answers and time are kept)')}
         right={<>
           <SheetTool onClick={() => setScratch(true)} label={tr('Scratch paper')} kbd="D"><ScratchIcon /></SheetTool>
+          <CalcTool as={(p) => <SheetTool {...p} />} />
           {left != null && <span className={'sheet-timer mono' + (left < 300 ? ' urgent' : '')} role="timer"><Timer size={14} strokeWidth={1.8} />{fmtDur(left)}</span>}
         </>}>
         <div className="sheet-col" ref={root}>

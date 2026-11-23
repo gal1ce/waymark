@@ -350,8 +350,54 @@ def _m12_note_topic(c: sqlite3.Connection) -> None:
         c.execute("ALTER TABLE notes_pages ADD COLUMN topic TEXT NOT NULL DEFAULT ''")
 
 
+_BLOCK_EN = {"Matematik": "Math", "Matematik II": "Math II", "İngilizce": "English", "Öğle arası": "Lunch", "Mola": "Break",
+             "Gün sonu testi + kapanış": "End-of-day test + close"}
+
+
+def _m13_english_seed(c: sqlite3.Connection) -> None:
+    """The CTU plan's first three days were stored while the app still wrote Turkish: their task texts follow the
+    current (English) seed. Only the text changes (title, detail, resource labels); status, time spent and meta stay.
+    A task is rewritten only where it still sits where the seed put it (same block, place and kind, not carried over)."""
+    tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "profile" not in tables or not c.execute("SELECT 1 FROM profile WHERE preset='ctu'").fetchone():
+        return
+    from .seed import monday, tuesday, wednesday
+    for ds, make in (("2026-11-23", monday), ("2026-11-24", tuesday), ("2026-11-25", wednesday)):
+        day = c.execute("SELECT status FROM days WHERE date=?", (ds,)).fetchone()
+        if not day or day[0] == "closed":
+            continue
+        plan, seen = make(), {}
+        for bid, kind in c.execute("SELECT id, kind FROM blocks WHERE date=? ORDER BY ord", (ds,)).fetchall():
+            n = seen[kind] = seen.get(kind, 0) + 1
+            for i, t in enumerate(plan.get(kind if n == 1 else f"{kind}{n}", [])):
+                c.execute("UPDATE tasks SET title=?, detail=?, resources=? WHERE block_id=? AND ord=? AND kind=? "
+                          "AND meta NOT LIKE '%carried_from%'",
+                          (t["title"], t.get("detail", ""), json.dumps(t.get("resources", []), ensure_ascii=False), bid, i, t["kind"]))
+    for old, new in _BLOCK_EN.items():
+        c.execute("UPDATE blocks SET title=? WHERE title=? AND date IN (SELECT date FROM days WHERE status<>'closed')", (new, old))
+
+
+def _m14_skip_passed_study(c: sqlite3.Connection) -> None:
+    """A passed unit test now ticks off that unit's "lessons + exercises" task (state._skip_unit_study); do the same
+    for tests passed before this existed, on days that aren't closed."""
+    rows = c.execute("SELECT t.id, t.date, t.meta, (SELECT s.value FROM scores s WHERE s.task_id=t.id ORDER BY s.id DESC LIMIT 1), "
+                     "(SELECT s.passed FROM scores s WHERE s.task_id=t.id ORDER BY s.id DESC LIMIT 1) FROM tasks t "
+                     "WHERE t.kind='khan_test' AND t.date IN (SELECT date FROM days WHERE status<>'closed')").fetchall()
+    for _tid, ds, meta, value, passed in rows:
+        if not passed:
+            continue
+        idx = int(json.loads(meta or "{}").get("unit_idx", 0))
+        for sid, smeta in c.execute("SELECT id, meta FROM tasks WHERE date=? AND kind='khan_study' AND status<>'done'", (ds,)).fetchall():
+            m = json.loads(smeta or "{}")
+            if int(m.get("unit_idx", -1)) != idx or m.get("score_kind") == "khan_unit":
+                continue
+            m["skipped"] = {"reason": "unit_passed", "percent": value}
+            c.execute("UPDATE tasks SET status='done', started_at=NULL, done_at=?, meta=? WHERE id=?",
+                      (ts(), json.dumps(m, ensure_ascii=False), sid))
+
+
 MIGRATIONS = [_m1_convos, _m2_test_cancel, _m3_test_pause, _m4_seed_refresh, _m5_indexes, _m6_khan, _m7_khan_texts, _m8_notes, _m9_notices, _m10_profile,
-              _m11_plan, _m12_note_topic]
+              _m11_plan, _m12_note_topic, _m13_english_seed, _m14_skip_passed_study]
 
 
 def _migrate(c: sqlite3.Connection) -> None:

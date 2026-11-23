@@ -110,9 +110,17 @@ class Intent:
     copy: int = 0                    # "two math tests": copies 0, 1, ...
 
 
+def own_words(text: str) -> str:
+    """What the user typed, without what the app put around it: the "> " lines quoted from the page (an
+    exercise saying "create an equivalent expression" on the Tests page is not a request for a test) and the
+    app's own "[from the … page]" / "[no question typed …]" lines."""
+    return "\n".join(l for l in text.splitlines() if not l.lstrip().startswith(">") and not re.fullmatch(r"\s*\[[^\]]*\]\s*", l))
+
+
 def parse(text: str, history: list[dict]) -> list[Intent]:
     """The practice tests one chat message asks for (at most MAX_PER_TURN); [] when it doesn't ask for one."""
-    asks = _TEST_W.search(text) and _MAKE_W.search(text)
+    text = own_words(text)
+    asks =_TEST_W.search(text) and _MAKE_W.search(text)
     more = _MORE.search(text) and not _ASK_Q.search(text)
     if not (asks or more) or _NOT_PRACTICE.search(text):
         return []
@@ -149,7 +157,7 @@ def parse(text: str, history: list[dict]) -> list[Intent]:
         out = [Intent(**{**out[0].__dict__, "copy": i}) for i in range(n)]
     if not out[0].topics and len(out) == 1 and ref is None:
         # "make a test" right after "let's do math and C": the topics come from the previous message
-        prev = next((m["content"] for m in reversed(history) if m["role"] == "user" and isinstance(m["content"], str)), "")
+        prev = own_words(next((m["content"] for m in reversed(history) if m["role"] == "user" and isinstance(m["content"], str)), ""))
         if _TEST_W.search(prev):
             out[0].topics = topics_in(prev)
     return out[:MAX_PER_TURN]

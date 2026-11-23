@@ -437,6 +437,7 @@ function TaskRow({ t, day, live, ctx }: { t: Task; day: Day; live: (t: Task) => 
   const active = day.status === 'active'
   const sec = live(t)
   const compileFail = t.compile?.type === 'compile_fail'
+  const skipped = t.status === 'done' && t.meta.skipped && typeof t.meta.skipped === 'object' ? t.meta.skipped as { percent?: number } : null
   const isTest = t.kind === 'test' || t.kind === 'c_quiz' || t.kind === 'unit_quiz'  // its main action is preparing the test
   const quietStart = isTest || t.kind === 'khan_test'      // the unit test button is the main action there
   const [busy, run] = useBusy()
@@ -460,6 +461,7 @@ function TaskRow({ t, day, live, ctx }: { t: Task; day: Day; live: (t: Task) => 
           {t.compile && <span title={t.compile.data.file} className={'cmp' + (compileFail ? ' fail' : '')}>
             <span className={'dot ' + (compileFail ? 'neg' : 'pos')} />{compileFail ? tr('error') : tr('compiled')}</span>}
           {t.score && <span>{t.score.value}{t.score.max === 100 ? '%' : `/${t.score.max}`}</span>}
+          {skipped && <span className="skip-tag">{tr('not needed')}</span>}
           <span className="kind">{KIND_LABEL[t.kind] ?? t.kind}</span>
           <span className="mins">{sec >= 60 ? `${fmtMin(Math.round(sec / 60))} / ` : ''}{fmtMin(t.est_min)}</span>
           {open ? <ChevronDown size={16} strokeWidth={1.5} /> : <ChevronRight size={16} strokeWidth={1.5} />}
@@ -467,6 +469,7 @@ function TaskRow({ t, day, live, ctx }: { t: Task; day: Day; live: (t: Task) => 
       </button>
       {open && (
         <div className="task-body">
+          {skipped && <div className="skip-note"><Check size={14} strokeWidth={2} />{tr('Not needed today: you passed the unit test ({n}%). The lessons stay here if you want to review.', { n: skipped.percent ?? '' })}</div>}
           {t.detail && <div className="md"><Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{fixMathInMd(t.detail)}</Markdown></div>}
           {typeof t.meta.lesson === 'string' && (
             <details className="lesson" open>

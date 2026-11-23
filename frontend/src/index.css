@@ -738,6 +738,9 @@ button.cell:focus-visible { outline-offset: 1px; position: relative; z-index: 1;
 .task.done .task-title { color: var(--t3); text-decoration: line-through; text-decoration-color: var(--line-strong); }
 .task-meta { display: flex; gap: 12px; align-items: center; font: 12px var(--mono); color: var(--t3); }
 .task-meta .kind { color: var(--t3); }
+.task-meta .skip-tag { color: var(--pos, var(--t2)); }
+.skip-note { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--t2); padding: 8px 12px; margin-bottom: 12px; border-radius: var(--r-row); background: var(--s-raised, transparent); border: 1px solid var(--line); }
+.skip-note svg { color: var(--pos, var(--accent)); flex: none; }
 .task-meta .cmp { display: inline-flex; align-items: center; gap: 6px; color: var(--t3); }
 .task-meta .cmp.fail { color: var(--neg); }
 .tag { font: 11px var(--mono); color: var(--t3); border: 1px solid var(--line); border-radius: var(--r-key); padding: 0 6px; line-height: 18px; }
@@ -1441,6 +1444,7 @@ button.avatar.me-pic { display: grid; place-items: center; padding: 0; border: 0
 .pw-solution { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; padding: 8px 12px; background: var(--s-raised);
   border-radius: var(--r-row); }
 .pw-sol-v { font-size: 15px; }
+.pw-sol-sep { color: var(--t3); margin-right: 4px; }
 .linkish { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 
 /* ================================================================= popovers from the top bar */
@@ -1877,8 +1881,47 @@ html.theme-fade, html.theme-fade * { transition: background-color 300ms var(--ea
 .scratch-paper { position: absolute; inset: 0; overflow: auto; background: var(--s-page); padding-top: 52px; container: main / inline-size; }
 .scratch-paper .note-bar .grow { flex: 1; }
 .scratch-top .btn.on { background: var(--accent-soft); color: var(--accent-text); border-color: var(--accent-line); }
-.scratch-peek { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); width: min(640px, calc(100% - 32px)); max-height: 40vh; overflow: auto; padding: 16px 20px; border-radius: var(--r-card); background: var(--s-raised); border: 1px solid var(--line-strong); box-shadow: var(--shadow-pop); z-index: 7; animation: pop var(--d-menu) var(--ease-out); }
-.scratch-peek .perseus { font-size: 16px; }
+.scratch-sheet { display: flex; }
+.scratch-main { position: relative; flex: 1; min-width: 0; min-height: 0; }
+/* the question beside the paper, so notes can be taken while reading it */
+.scratch-q { flex: 0 0 min(38%, 480px); display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--s-card); animation: fade var(--d-panel) var(--ease-out); }
+.scratch-q-h { flex: none; display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 8px 0 20px; font-size: 12px; color: var(--t3); border-bottom: 1px solid var(--line); }
+.scratch-q-b { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px 20px 24px; }
+.scratch-q-b .perseus { font-size: 16px; }
+@media (max-width: 760px) {
+  .scratch-sheet.with-q { flex-direction: column; }
+  .scratch-q { flex: none; max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .scratch-q-h { height: 40px; }
+  .scratch-q-b { padding: 12px 16px 16px; }
+}
+
+/* calculator: floats over the sheet and the scratch paper, can be dragged by its head */
+.calc {
+  position: fixed; right: 24px; bottom: 24px; z-index: 48; width: 300px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px);
+  display: flex; flex-direction: column; background: var(--s-card); border: 1px solid var(--line-strong); border-radius: var(--r-dialog);
+  box-shadow: var(--shadow-pop); overflow: hidden; animation: pop var(--d-menu) var(--ease-out);
+}
+.calc-head { flex: none; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 4px 0 12px; border-bottom: 1px solid var(--line); cursor: grab; user-select: none; touch-action: none; }
+.calc-head:active { cursor: grabbing; }
+.calc-grip { color: var(--t3); flex: none; }
+.calc-t { flex: 1; font-size: 13px; font-weight: 500; }
+.calc-log { flex: 1 1 auto; min-height: 56px; max-height: 180px; overflow-y: auto; overscroll-behavior: contain; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.calc-empty { font-size: 12px; line-height: 18px; color: var(--t3); padding: 6px 6px; }
+.calc-line { display: grid; justify-items: end; gap: 1px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--r-row); background: none; cursor: pointer; text-align: right; color: var(--t1); }
+.calc-line:hover { background: var(--s-raised); }
+.calc-e { font-size: 11px; color: var(--t3); overflow-wrap: anywhere; }
+.calc-r { font-size: 17px; overflow-wrap: anywhere; }
+.calc-a { font-size: 11px; color: var(--t2); }
+.calc-in { flex: none; padding: 6px 10px 0; }
+.calc-in .input { width: 100%; height: 40px; font-size: 16px; text-align: right; }
+.calc-in .input.bad { border-color: var(--neg); }
+.calc-err { flex: none; padding: 4px 12px 0; font-size: 12px; color: var(--neg); text-align: right; }
+.calc-keys { flex: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 10px; }
+.calc-keys .key { height: 40px; font-size: 15px; display: grid; place-items: center; }
+.calc-keys .key.back { color: var(--neg); }
+.calc-keys .key.eq { background: linear-gradient(180deg, var(--accent-hi), var(--accent)); color: var(--accent-ink); border-color: transparent; box-shadow: inset 0 -2px 0 var(--lip); font: 600 17px var(--sans); }
+.calc-keys .key:nth-child(23) { font: 500 13px var(--mono); }
+@media (max-width: 560px) { .calc { right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); } }
 
 /* the verdict: a bar that rises from the bottom with one big button */
 .verdict-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 0 16px max(16px, env(safe-area-inset-bottom)); animation: step-in var(--d-step) var(--ease-out); pointer-events: none; }
@@ -2078,6 +2121,12 @@ html.theme-fade, html.theme-fade * { transition: background-color 300ms var(--ea
 /* ================================================================= notifications */
 .toasts { position: fixed; top: 68px; right: 16px; bottom: auto; left: auto; transform: none; width: min(380px, calc(100vw - 32px)); align-items: stretch; gap: 8px; z-index: 60; pointer-events: none; }
 @media (min-width: 861px) { .shell.coach-right .toasts { right: calc(16px + var(--coach-col, 0px)); } }
+/* a full-screen sheet leaves room for an open coach panel (wide) or sits under it (narrow: the coach is a sheet too) */
+@media (min-width: 861px) {
+  body.coach-on[data-coach="right"] .sheet { right: var(--sheet-coach, 0px); border-right: 1px solid var(--line); }
+  body.coach-on[data-coach="left"] .sheet { left: var(--sheet-coach, 0px); border-left: 1px solid var(--line); }
+}
+@media (max-width: 860px) { body.coach-on .coach { z-index: 41; } }
 .toast {
   position: relative; pointer-events: auto; overflow: hidden; display: grid; grid-template-columns: 34px minmax(0, 1fr) 24px; gap: 10px; align-items: start;
   padding: 12px 10px 12px 12px; max-width: none; border-radius: 14px; background: var(--s-raised); border: 1px solid var(--line-strong);

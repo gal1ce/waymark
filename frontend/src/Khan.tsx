@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { CalcTool } from './Calc'
 import { Check, ChevronLeft, CircleDashed, Download, ExternalLink, Eye, PlayCircle, Send, SquarePen, X } from 'lucide-react'
 import { api, ApiError, type KhanCheck, type KhanItem, type KhanOutline, type KhanProgress, type KhanQuestion, type KhanTest, type KhanVideo,
   type PAnswers, type PContent, type Task, fmtMin } from './api'
@@ -232,6 +233,7 @@ function KhanPractice({ id, onBack, ctx, kolibri, partial }: { id: string; onBac
         {kolibri && partial && <a className="btn ghost sm" href={kolibri} target="_blank" rel="noreferrer"
           title={tr("Some of this exercise's questions (graphs, drag and drop) only work in Kolibri's player")}><ExternalLink size={13} strokeWidth={1.5} />Kolibri</a>}
         <SheetTool onClick={() => setScratch(true)} label={tr('Scratch paper')} kbd="D"><ScratchIcon /></SheetTool>
+        <CalcTool as={(p) => <SheetTool {...p} />} />
         <SheetTool on={pad} onClick={() => setPad((x) => !x)} label={tr('Keypad')}><KeypadIcon /></SheetTool>
       </>}
       bar={bar}>
@@ -416,6 +418,7 @@ export function KhanTestPage({ id, ctx }: { id: number; ctx: Ctx }) {
     <SheetFrame title={title} step={tr('Question {a} of {b}', { a: ci + 1, b: n })} progress={count / n} onClose={close} closeLabel={tr('Leave the test (answers are kept)')}
       right={<>
         <SheetTool onClick={() => setScratch(true)} label={tr('Scratch paper')} kbd="D"><ScratchIcon /></SheetTool>
+        <CalcTool as={(p) => <SheetTool {...p} />} />
         <span className="sheet-count mono" title={tr('Answered')}>{count}/{n}</span>
       </>}>
       <div className="sheet-col" ref={root}>

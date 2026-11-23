@@ -193,6 +193,14 @@ export default function App() {
     return () => window.removeEventListener('hashchange', on)
   }, [])
   useEffect(() => store.set('ctu.coach', coachOpen), [coachOpen])
+  // full-screen sheets (unit test, practice, video) are portalled to <body>: tell them where the coach panel is,
+  // so "Open in panel" from a test shows the panel beside the sheet instead of behind it
+  useEffect(() => {
+    const b = document.body
+    b.classList.toggle('coach-on', coachOpen)
+    b.dataset.coach = layout.coach
+    b.style.setProperty('--sheet-coach', `min(${clampCoach(coachW)}px, 50vw)`)
+  }, [coachOpen, coachW, layout.coach])
   useEffect(() => num.set('ctu.coachW', coachW), [coachW])
 
   // shared data: meta, overview, today's day (used by the top bar, dashboard and coach)

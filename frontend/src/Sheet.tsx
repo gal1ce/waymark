@@ -1,12 +1,13 @@
 import { t as tr } from './i18n'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, Check, Delete, Eye, FileText, Keyboard, Lightbulb, Lock, PencilLine, PenLine, X, Zap } from 'lucide-react'
+import { ArrowRight, Calculator, Check, Delete, Eye, EyeOff, FileText, Keyboard, Lightbulb, Lock, PencilLine, PenLine, X, Zap } from 'lucide-react'
 import type { Board, DocBlock, PageSetup, Stroke } from './api'
 import { DocEditor } from './DocEditor'
 import { DocPage } from './DocPage'
 import BoardView from './Board'
 import { Scrollbar } from './Scrollbar'
+import { toggleCalc } from './Calc'
 
 /* The study sheet: one question at a time, centred on graph paper, nothing else on screen. Shared by Khan
    practice, the Khan unit test and the end-of-day test. A bar on top (close, where you are, how far along),
@@ -19,7 +20,7 @@ export function SheetFrame({ title, step, progress, onClose, closeLabel = 'Close
   const body = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || document.querySelector('.scratch-sheet, .ctxmenu, .ask')) return
+      if (e.key !== 'Escape' || document.querySelector('.scratch-sheet, .ctxmenu, .ask') || (e.target as HTMLElement).closest?.('.calc')) return
       const t = e.target as HTMLElement
       if (t.closest('input, textarea')) { t.blur(); return }
       onClose()
@@ -138,6 +139,7 @@ const scratchStore = new Map<string, Board>()
 const paperStore = new Map<string, { blocks: DocBlock[]; page?: PageSetup; ink?: Stroke[] }>()
 type ScratchMode = 'ink' | 'paper'
 const MODE_KEY = 'ctu.scratch.mode'
+const Q_KEY = 'ctu.scratch.question'
 const readMode = (): ScratchMode => { try { return localStorage.getItem(MODE_KEY) === 'paper' ? 'paper' : 'ink' } catch { return 'ink' } }
 
 /** Scratch paper over the question, kept per question until the page is closed. Two kinds, the last one used comes
@@ -147,7 +149,9 @@ export function Scratch({ id, onClose, question }: { id: string; onClose: () => 
   const [b, setB] = useState<Board>(() => scratchStore.get(id) ?? { items: [], arrows: [], strokes: [] })
   const [paper, setPaper] = useState(() => paperStore.get(id) ?? { blocks: [{ id: 'p1', type: 'text', md: '' } as DocBlock], page: { size: window.innerWidth < 640 ? 'A5' : 'A4', paper: 'grid' } as PageSetup })
   const [mode, setModeS] = useState<ScratchMode>(readMode)
-  const [peek, setPeek] = useState(false)
+  // the question stays beside the paper (above it on a phone), so notes can be taken while reading it
+  const [showQ, setShowQS] = useState(() => { try { return localStorage.getItem(Q_KEY) !== 'off' } catch { return true } })
+  const setShowQ = (v: boolean) => { setShowQS(v); try { localStorage.setItem(Q_KEY, v ? 'on' : 'off') } catch { /* only a preference */ } }
   const setMode = (m: ScratchMode) => { setModeS(m); try { localStorage.setItem(MODE_KEY, m) } catch { /* only a preference */ } }
   const keep = (x: typeof paper) => { setPaper(x); paperStore.set(id, x) }
   useEffect(() => {
@@ -156,6 +160,7 @@ export function Scratch({ id, onClose, question }: { id: string; onClose: () => 
       // Esc first leaves what is open on the paper (a text being written, a dialog, a menu), then the scratch paper
       if (document.querySelector('.scratch-sheet .modal-wrap, .modal-wrap .gx-modal, .look-pop')) return
       const tg = e.target as HTMLElement
+      if (tg.closest?.('.calc')) return   // Esc in the calculator closes the calculator
       if (tg.closest?.('.scratch-paper textarea, .scratch-paper input')) { e.stopPropagation(); tg.blur(); return }
       e.stopPropagation(); onClose()
     }
@@ -163,7 +168,17 @@ export function Scratch({ id, onClose, question }: { id: string; onClose: () => 
     return () => window.removeEventListener('keydown', k, true)
   }, [onClose])
   return (
-    <div className="scratch-sheet" role="dialog" aria-label={tr('Scratch paper')}>
+    <div className={'scratch-sheet' + (showQ && question ? ' with-q' : '')} role="dialog" aria-label={tr('Scratch paper')}>
+      {showQ && question && (
+        <aside className="scratch-q" aria-label={tr('Question')}>
+          <div className="scratch-q-h">
+            <span>{tr('Question')}</span>
+            <button className="icon-btn" onClick={() => setShowQ(false)} aria-label={tr('Hide question')} title={tr('Hide question')}><EyeOff size={15} strokeWidth={1.6} /></button>
+          </div>
+          <div className="scratch-q-b">{question}</div>
+        </aside>
+      )}
+      <div className="scratch-main">
       {mode === 'ink'
         ? <BoardView mode="scratch" board={b} onChange={(x) => { setB(x); scratchStore.set(id, x) }} />
         : <div className="scratch-paper">
@@ -177,11 +192,13 @@ export function Scratch({ id, onClose, question }: { id: string; onClose: () => 
           <button role="radio" aria-checked={mode === 'paper'} className={mode === 'paper' ? 'on' : ''} onClick={() => setMode('paper')}><FileText size={14} strokeWidth={1.7} />{tr('Paper')}</button>
         </div>
         <span className="grow" />
-        <button className={'btn sm pill' + (peek ? ' on' : '')} onClick={() => setPeek((p) => !p)} aria-label={peek ? tr('Hide question') : tr('View question')}>
-          <Eye size={14} strokeWidth={1.7} /><span className="lbl">{peek ? tr('Hide question') : tr('View question')}</span></button>
+        {question && !showQ && <button className="btn sm pill" onClick={() => setShowQ(true)} aria-label={tr('View question')}>
+          <Eye size={14} strokeWidth={1.7} /><span className="lbl">{tr('View question')}</span></button>}
+        <button className="btn sm pill" onClick={toggleCalc} aria-label={tr('Calculator')} title={`${tr('Calculator')}  C`}>
+          <Calculator size={14} strokeWidth={1.7} /><span className="lbl">{tr('Calculator')}</span></button>
         <button className="btn sm pill" onClick={onClose} aria-label={tr('Back to the answer')}><X size={14} strokeWidth={1.7} /><span className="lbl">{tr('Back to the answer')}</span></button>
       </div>
-      {peek && <div className="scratch-peek">{question}</div>}
+      </div>
     </div>
   )
 }
