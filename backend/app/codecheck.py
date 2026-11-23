@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import re
-import resource
 import shutil
 import subprocess
 import tempfile
@@ -86,6 +85,8 @@ def _reindent(code: str) -> str:
 
 
 def _limits() -> None:
+    import resource   # Unix only; run() never gets here on Windows
+
     resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
     resource.setrlimit(resource.RLIMIT_AS, (512 << 20, 512 << 20))
     resource.setrlimit(resource.RLIMIT_FSIZE, (1 << 20, 1 << 20))
@@ -95,6 +96,9 @@ def _limits() -> None:
 
 def run(code: str) -> tuple[str, str]:
     """('ok', stdout) | ('skip', why) | ('compile', error) | ('crash', why). Wraps a bare snippet in main()."""
+    if os.name == "nt":
+        # the run is fenced in with Unix resource limits (and bwrap where there is one); Windows has neither here
+        return "skip", "running code isn't supported on Windows"
     cpp = is_cpp(code)
     cc = _CXX if cpp else _CC
     if not cc:

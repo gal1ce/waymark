@@ -49,7 +49,12 @@ esac
 
 # start it once on an empty data folder: the API and the page must answer
 SMOKE="$(mktemp -d)"
-CTU_DATA_DIR="$(cygpath -m "$SMOKE" 2>/dev/null || echo "$SMOKE")" "${TEST[@]}" --smoke-test
+if ! CTU_DATA_DIR="$(cygpath -m "$SMOKE" 2>/dev/null || echo "$SMOKE")" "${TEST[@]}" --smoke-test; then
+  # a program without a console (Windows, macOS) prints nothing: the reason is in its log
+  echo "build.sh: the smoke test failed; its log:" >&2
+  tail -40 "$SMOKE/waymark.log" >&2 || true
+  exit 1
+fi
 tail -3 "$SMOKE/waymark.log"
 rm -rf "$SMOKE"
 echo "build.sh: $(du -h "$BIN" | cut -f1) $BIN"
