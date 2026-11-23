@@ -28,7 +28,7 @@ export default function CalendarView({ month, ctx }: { month?: string; ctx: Ctx 
   const s = cal?.days.reduce((a, d) => ({ min: a.min + d.minutes, closed: a.closed + (d.status === 'closed' ? 1 : 0), study: a.study + (d.exists ? 1 : 0) }), { min: 0, closed: 0, study: 0 })
 
   return (
-    <div className="page">
+    <div className="page wide">
       <PageHead title={`${MONTHS[mo - 1]} ${y}`}
         sub={s ? <>{tr('{n} study days', { n: s.study })} · {tr('{n} closed', { n: s.closed })} · {fmtHours(s.min)}</> : null}
         right={

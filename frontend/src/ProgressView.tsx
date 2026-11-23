@@ -32,7 +32,7 @@ export default function ProgressView({ ctx }: { ctx: Ctx }) {
   const beejDone = p.beej.filter((b) => b.status === 'done').length
 
   return (
-    <div className="page">
+    <div className="page wide">
       <PageHead title={tr('Progress')} sub={tr('Scores against thresholds. Nothing below its threshold counts as learned')} />
 
       <Section title={tr('Scores')} className="chart-card" meta={cur.pts.length ? tr(cur.pts.length === 1 ? '{n} result' : '{n} results', { n: cur.pts.length }) : undefined}>

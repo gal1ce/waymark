@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CalcTool } from './Calc'
 import { SpeedPicker, VideoNotes, savedRate } from './VideoNotes'
+import { Fold } from './Fold'
 import { Check, ChevronLeft, CircleDashed, Download, ExternalLink, Eye, NotebookPen, PlayCircle, Send, SquarePen, X } from 'lucide-react'
 import { api, ApiError, type KhanCheck, type KhanItem, type KhanOutline, type KhanProgress, type KhanQuestion, type KhanTest, type KhanVideo,
   type PAnswers, type PContent, type Task, fmtMin } from './api'
@@ -145,10 +146,11 @@ function KhanVideoView({ id, title, onBack, nextUp }: { id: string; title: strin
           {nextUp ? <>{tr('Up next')}: {nextUp.title}</> : tr('That was the last step in this unit.')}
         </VerdictBar>
       ) : null}>
-      <div className={'sheet-col wide vid-col' + (notes ? ' with-notes' : '')}>
-        <h1 className="sheet-h">{title}</h1>
+      <div className={'sheet-col vid-col' + (notes ? ' with-notes' : '')}>
         {err && <div className="errbox">{err}</div>}
+        {/* in the order of watching: the video, its speed under it, notes beside it; what the video is about is folded below */}
         <div className={'vid-layout' + (v && notes ? ' with-notes' : '')}>
+          <h1 className="sheet-h">{title}</h1>
           {v && (
             <video ref={ref} className="sheet-video" controls autoPlay preload="metadata" poster={v.poster ?? undefined} src={v.src}
               onLoadedMetadata={(e) => { e.currentTarget.playbackRate = savedRate() }}
@@ -166,9 +168,13 @@ function KhanVideoView({ id, title, onBack, nextUp }: { id: string; title: strin
             </div>
           )}
           {v && notes && <VideoNotes title={title} video={ref} />}
+          {v && (
+            <Fold className="vid-about" title={tr('About this video')} remember="video-about">
+              {v.description && <p className="sheet-desc">{v.description}</p>}
+              <p className="sheet-note">{tr('Starts at 0.75× with English subtitles; Turkish is in the CC menu. New terms go to')} <code>eng/math-terms.md</code>.</p>
+            </Fold>
+          )}
         </div>
-        {v?.description && <p className="sheet-desc">{v.description}</p>}
-        <p className="sheet-note">{tr('Starts at 0.75× with English subtitles; Turkish is in the CC menu. New terms go to')} <code>eng/math-terms.md</code>.</p>
       </div>
     </SheetFrame>
   )
@@ -259,7 +265,7 @@ function KhanPractice({ id, onBack, ctx, kolibri, partial }: { id: string; onBac
       }}>
         <h1 className="sheet-h"><em>{tr('Practice')}</em> {q?.title}</h1>
         {p && <Dots p={p} />}
-        {q && <div className="statline"><span>{tr('Right')} <b>{right}/{p?.last.length ?? 0}</b></span><span>{tr('Mastery at')} <b className="ink">{p?.m ?? 5}/{p?.n ?? 7}</b></span><span>{tr('Hints')} <b className="ink">{hints.length}/{q.hints_total}</b></span></div>}
+        {/* right/mastery is in the top bar, hints on the hint pills: nothing between the title and the question */}
         {err && <div className="errbox">{err}{' '}{kolibri && <a href={kolibri} target="_blank" rel="noreferrer">{tr('Open in Kolibri')}</a>}</div>}
         {q && (
           <>

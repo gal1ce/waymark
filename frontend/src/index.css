@@ -501,6 +501,8 @@ select.input { padding-right: 30px; appearance: none; cursor: pointer;
 
 /* ------------------------------------------------------------ page frame */
 .page { max-width: 1280px; margin: 0 auto; padding: 32px clamp(16px, 4cqi, 48px) 96px; display: flex; flex-direction: column; gap: 32px; }
+/* pages with columns (the day, the calendar, progress) grow on a big screen instead of leaving its sides empty */
+.page.wide { max-width: clamp(1280px, 70cqi, 1720px); }
 .page.narrow { max-width: 880px; }
 .page.focus { max-width: 760px; }
 .page > * { animation: enter var(--d-enter) var(--ease-out) backwards; }
@@ -669,7 +671,7 @@ button.cell:focus-visible { outline-offset: 1px; position: relative; z-index: 1;
 .current .acts-end { display: flex; gap: 8px; margin-left: auto; }
 .current.idle { background: var(--s-card); border-color: var(--line); }
 
-.day-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; align-items: start; }
+.day-grid { display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 22cqi, 380px); gap: 40px; align-items: start; }
 .timeline { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .tl-row { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 16px; }
 .tl-time { display: flex; flex-direction: column; gap: 2px; padding-top: 16px; font: 12px var(--mono); color: var(--t2); text-align: right; }
@@ -1782,23 +1784,26 @@ html.theme-fade, html.theme-fade * { transition: background-color 300ms var(--ea
   background-size: 100% 100%, 22px 22px;
   animation: fade var(--d-panel) var(--ease-out);
 }
-.sheet-top { position: relative; flex: none; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px max(16px, calc((100% - 760px) / 2)) 14px; }
+/* the band the top bar and its progress line sit in: as wide as the sheet's content (a video sheet sets its own) */
+.sheet { --sheet-band: 1040px; --sheet-pad: max(16px, calc((100% - var(--sheet-band)) / 2)); }
+.sheet-top { position: relative; flex: none; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px var(--sheet-pad) 14px; }
 .sheet-where { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: 13px; }
 .sheet-t { color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet-step { color: var(--t3); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sheet-step::before { content: '·'; margin-right: 10px; }
 .sheet-r { display: flex; align-items: center; gap: 8px; }
 .sheet-count { font-size: 13px; color: var(--accent-text); font-weight: 500; }
-.sheet-prog { position: absolute; left: max(16px, calc((100% - 760px) / 2)); right: max(16px, calc((100% - 760px) / 2)); bottom: 0; height: 6px; border-radius: 3px; background: oklch(from var(--accent) l c h / 0.12); overflow: hidden; }
+.sheet-prog { position: absolute; left: var(--sheet-pad); right: var(--sheet-pad); bottom: 0; height: 6px; border-radius: 3px; background: oklch(from var(--accent) l c h / 0.12); overflow: hidden; }
 .sheet-prog span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-hi)); transition: width 500ms var(--ease-out); }
 .sheet-body { flex: 1; overflow-y: auto; min-height: 0; padding: 0 16px 160px; scroll-behavior: smooth; }
-.sheet-col { max-width: 680px; margin: 0 auto; padding-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 18px; animation: step-in var(--d-step) var(--ease-out); }
-.sheet-col.wide { max-width: 900px; }
-.sheet-h { margin: 0; text-align: center; font: 600 30px/38px var(--serif); color: var(--white); letter-spacing: -0.01em; text-wrap: balance; }
+/* a question keeps a reading measure, but grows with a big screen instead of sitting small in the middle of it */
+.sheet-col { max-width: clamp(680px, 44vw, 860px); margin: 0 auto; padding-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 18px; animation: step-in var(--d-step) var(--ease-out); }
+.sheet-col.wide { max-width: clamp(900px, 56vw, 1120px); }
+.sheet-h { margin: 0; text-align: center; font: 600 clamp(30px, 0.5vw + 23px, 36px)/1.25 var(--serif); color: var(--white); letter-spacing: -0.01em; text-wrap: balance; }
 .sheet-h em { font-style: normal; color: var(--accent-text); }
 .sheet-h.big { font-size: 40px; line-height: 46px; }
 .sheet-q { width: 100%; padding: 22px 0 6px; animation: step-in var(--d-step) var(--ease-out); }
-.sheet-q .perseus { font-size: 20px; line-height: 1.6; text-align: center; color: var(--white); }
+.sheet-q .perseus { font-size: clamp(20px, 0.4vw + 14.5px, 24px); line-height: 1.6; text-align: center; color: var(--white); }
 .sheet-q .perseus .katex { font-size: 1.12em; }
 /* the equation of a question sits under it, centred like the question itself */
 .sheet-q .q-math { margin-top: 14px; color: var(--white); }
@@ -1831,14 +1836,25 @@ html.theme-fade, html.theme-fade * { transition: background-color 300ms var(--ea
 .sheet-acts .btn.lg:last-child { min-width: 140px; }
 .sheet-sol { width: 100%; }
 .sheet-video { width: 100%; max-height: 64vh; border-radius: 16px; background: #000; display: block; box-shadow: var(--shadow-pop); }
-/* watching: the video, its speed under it, and a sheet of notes beside it from the top of the video to the speed row */
-.sheet-col.vid-col.with-notes { max-width: 1240px; }
-.vid-layout { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 24px; }
-.vid-layout.with-notes { grid-template-columns: minmax(0, 1fr) 340px; }
-.vid-layout.with-notes .vid-notes { grid-column: 2; grid-row: 1 / span 2; }
+/* watching, in the order it's done: the video as big as the screen allows, its speed right under it, notes beside it
+   from the top of the video to the speed row; what the video is about is folded under it */
+.sheet-col.vid-col {
+  --vid-h: max(320px, calc(100dvh - 280px)); --notes-w: clamp(320px, 24vw, 460px);
+  max-width: max(680px, calc(var(--vid-h) * 16 / 9)); padding-top: 20px; align-items: stretch;
+}
+.sheet-col.vid-col.with-notes { max-width: max(680px, calc(var(--vid-h) * 16 / 9 + var(--notes-w) + 24px)); }
+.sheet:has(.vid-col) { --sheet-band: max(680px, calc((100dvh - 280px) * 16 / 9)); }
+.sheet:has(.vid-col.with-notes) { --sheet-band: max(680px, calc((100dvh - 280px) * 16 / 9 + clamp(320px, 24vw, 460px) + 24px)); }
+.vid-layout { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 24px; align-items: start; }
+.vid-layout.with-notes { grid-template-columns: minmax(0, 1fr) var(--notes-w); }
+.vid-layout > .sheet-h { grid-column: 1 / -1; text-align: left; font-size: 24px; line-height: 32px; }
+.vid-layout .sheet-video { max-height: var(--vid-h); }
+.vid-layout.with-notes .vid-notes { grid-column: 2; grid-row: 2 / span 2; align-self: stretch; }
 .vid-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .vid-speed { flex: none; }
 .vid-speed button { flex: none; padding: 0 10px; font-variant-numeric: tabular-nums; }
+.vid-about { grid-column: 1; }
+.vid-about .sheet-desc, .vid-about .sheet-note { text-align: left; }
 /* the notes: a page of the Notebook, ruled, written in the page's own type */
 .vid-notes {
   min-height: 0; display: flex; flex-direction: column; overflow: hidden;
@@ -1861,9 +1877,27 @@ html.theme-fade, html.theme-fade * { transition: background-color 300ms var(--ea
 @media (max-width: 1100px) {
   .vid-layout.with-notes { grid-template-columns: minmax(0, 1fr); }
   .vid-layout.with-notes .vid-notes { grid-column: 1; grid-row: auto; height: 300px; }
+  .sheet:has(.vid-col) { --sheet-band: 100%; }
 }
 .sheet-desc { font: 16px/26px var(--serif); color: var(--t2); margin: 0; max-width: 68ch; text-align: center; }
 .sheet-note { font-size: 12px; color: var(--t3); margin: 0; text-align: center; }
+
+/* a folded section (Fold.tsx): reference material one click away. A quiet row with a turning chevron; open, its body
+   hangs under the title, indented to the title's text */
+.fold { width: 100%; min-width: 0; }
+.fold-h {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 10px 6px 6px; margin: 0;
+  border: 0; border-radius: var(--r-ctl); background: none; color: var(--t2); font-size: 13px; font-weight: 500; text-align: left; cursor: pointer;
+  transition: background-color var(--d-hover) var(--ease-out), color var(--d-hover) var(--ease-out);
+}
+.fold-h:hover { background: var(--s-hover); color: var(--t1); }
+.fold-h:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 1px; }
+.fold-ic { flex: none; color: var(--t3); transition: transform var(--d-menu) var(--ease-out); }
+.fold.open .fold-ic { transform: rotate(90deg); }
+.fold-t { flex: 1; min-width: 0; }
+.fold-m { flex: none; font-size: 12px; font-weight: 400; color: var(--t3); }
+.fold-b[hidden] { display: none; }
+.fold-b { padding: 6px 10px 10px 28px; display: flex; flex-direction: column; gap: 10px; animation: fade var(--d-menu) var(--ease-out); }
 .sheet-submit-early { font-size: 12px; color: var(--t3); }
 .sheet .statline { margin-top: -6px; }
 .sheet .kdots .kdot { width: 10px; height: 10px; }
@@ -2308,7 +2342,8 @@ html.theme-fade, html.theme-fade * { transition: background-color 300ms var(--ea
 .sheet-tool.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-text); }
 .sheet-tool kbd { opacity: 0.7; }
 .sheet-r { gap: 8px; }
-@media (max-width: 640px) { .sheet-tool .st-l, .sheet-tool kbd { display: none; } .sheet-tool { width: 34px; padding: 0; justify-content: center; } }
+/* below 900px the tools keep their icons, so the sheet's title isn't cut short */
+@media (max-width: 900px) { .sheet-tool .st-l, .sheet-tool kbd { display: none; } .sheet-tool { width: 34px; padding: 0; justify-content: center; } }
 
 /* accent picker */
 .accent-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 18px; }
