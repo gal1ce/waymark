@@ -187,16 +187,18 @@ export type PWidget = { type: string } & Record<string, unknown>
 export type PContent = { content: string; widgets: Record<string, PWidget>; graphie: string[] }
 export type PAnswer = string | number | number[]
 export type PAnswers = Record<string, PAnswer>
-export type PFeedback = { correct: boolean; widgets: Record<string, { correct: boolean; message: string }> }
+export type PFeedback = { correct: boolean; widgets: Record<string, { correct: boolean; message: string; right?: number[] }> }
+/** The right answer per widget, as markdown: a list for a choose-all question (one entry per right choice). */
+export type PSolution = Record<string, string | string[]>
 export type KhanQuestion = { exercise_id: string; item_id: string; title: string; question: PContent; hints_total: number
   hints: PContent[]; counted: boolean; progress: KhanProgress }
-export type KhanCheck = PFeedback & { progress: KhanProgress; solution: Record<string, string> | null }
+export type KhanCheck = PFeedback & { progress: KhanProgress; solution: PSolution | null }
 export type KhanTest = {
   id: number; date: string; task_id: number; status: 'in_progress' | 'submitted'; score: number | null; threshold: number
   unit: { idx: number; name: string; course: string }
   questions: { key: string; exercise: string; question?: PContent; hints?: PContent[]; missing?: boolean }[]
   answers: Record<string, PAnswers>
-  results: Record<string, PFeedback & { solution: Record<string, string> }> | null
+  results: Record<string, PFeedback & { solution: PSolution }> | null
 }
 
 // XP: derived on the server from recorded work (tasks, Khan answers, tests, closed days)
@@ -343,7 +345,7 @@ export const api = {
   khanExercise: (id: string) => req<KhanQuestion>('GET', `/khan/exercise/${id}`),
   khanCheck: (id: string, item_id: string, answers: PAnswers) => req<KhanCheck>('POST', `/khan/exercise/${id}/check`, { item_id, answers }),
   khanHint: (id: string, item_id: string) => req<{ hints: PContent[]; hints_total: number }>('POST', `/khan/exercise/${id}/hint`, { item_id }),
-  khanReveal: (id: string, item_id: string) => req<{ hints: PContent[]; solution: Record<string, string>; progress: KhanProgress }>('POST', `/khan/exercise/${id}/reveal`, { item_id }),
+  khanReveal: (id: string, item_id: string) => req<{ hints: PContent[]; solution: PSolution; progress: KhanProgress }>('POST', `/khan/exercise/${id}/reveal`, { item_id }),
   khanStartTest: (task_id: number) => req<{ id: number }>('POST', '/khan/tests', { task_id }),
   khanTest: (id: number) => req<KhanTest>('GET', `/khan/tests/${id}`),
   khanSaveTest: (id: number, answers: Record<string, PAnswers>) => req('PUT', `/khan/tests/${id}/answers`, { answers }),

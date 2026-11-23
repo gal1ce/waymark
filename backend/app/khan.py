@@ -593,6 +593,14 @@ def _key(it: dict) -> str:
     return f"{it['exercise_id']}:{it['item_id']}"
 
 
+def _with_answer(g: dict, item: dict) -> dict:
+    """A graded question with its right answer added, and the right choices marked on each choice widget."""
+    widgets = {n: dict(w) for n, w in (g.get("widgets") or {}).items()}
+    for name, idx in perseus.right_choices(item).items():
+        widgets.setdefault(name, {"correct": False, "message": ""})["right"] = idx
+    return {**g, "widgets": widgets, "solution": perseus.solution(item)}
+
+
 def get_test(tid: int) -> dict:
     t = db.q1("SELECT * FROM khan_tests WHERE id=?", (tid,))
     if not t:
@@ -608,6 +616,8 @@ def get_test(tid: int) -> dict:
             qs.append({"key": k, "exercise": _title(it["exercise_id"]), "missing": True})
             continue
         q = {"key": k, "exercise": _title(it["exercise_id"]), "question": _public_item(it["exercise_id"], it["item_id"], item)}
+        if results and k in results:   # re-derived, so tests submitted before a format change show it too
+            results[k] = _with_answer(results[k], item)
         if results:
             q["hints"] = [perseus.public(h, _base(it["exercise_id"]), it["item_id"]) for h in perseus.hints(item)]
         qs.append(q)
@@ -639,7 +649,7 @@ def submit_test(tid: int, answers: dict) -> dict:
             a = (answers or {}).get(k) or {}
             g = perseus.grade(item, a)
             right += g["correct"]
-            results[k] = {**g, "solution": perseus.solution(item)}
+            results[k] = _with_answer(g, item)
             _record(it["exercise_id"], it["item_id"], g["correct"], False, a, mode="test", test_id=tid)
         score = round(100 * right / len(items), 1)
         db.ex("UPDATE khan_tests SET status='submitted', answers=?, results=?, score=?, submitted_at=? WHERE id=?",
@@ -739,7 +749,8 @@ def coach_brief(days: int = 21) -> str:
                     item = package(ex)["items"][it["item_id"]]
                 except (Unavailable, KeyError):
                     continue
-                right = "; ".join(v for v in (results.get(k) or {}).get("solution", {}).values() if v)
+                right = "; ".join(x for v in (results.get(k) or {}).get("solution", {}).values()
+                                  for x in (v if isinstance(v, list) else [v]) if x)
                 lines.append(f"    - Q: {_plain(item['question'].get('content', ''))} | user answered: "
                              f"{_given(item, answers.get(k) or {})} | right answer: {right}")
     if not lines:

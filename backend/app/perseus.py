@@ -528,11 +528,17 @@ def solution(item: dict) -> dict:
         elif t == "expression":
             f = next((x for x in o.get("answerForms", []) if x.get("considered") == "correct"), None)
             out[name] = f"${f['value']}$" if f else ""
-        elif t == "radio":
-            out[name] = " · ".join(c.get("content", "") or "None of the above" for c in o.get("choices", []) if c.get("correct"))
+        elif t == "radio":   # one entry per right choice: a multi-select answer is a list, never one run-on line
+            out[name] = [c.get("content", "") or "None of the above" for c in o.get("choices", []) if c.get("correct")]
         elif t == "dropdown":
             out[name] = " · ".join(c.get("content", "") for c in o.get("choices", []) if c.get("correct"))
     return out
+
+
+def right_choices(item: dict) -> dict[str, list[int]]:
+    """For each choice widget, the indices of its right choices (marked on the question once the answer is shown)."""
+    return {name: [i for i, c in enumerate((w.get("options") or {}).get("choices") or []) if c.get("correct")]
+            for name, w in widgets_used(item["question"]).items() if w.get("type") == "radio"}
 
 
 def _fmt_num(v, forms: list[str]) -> str:

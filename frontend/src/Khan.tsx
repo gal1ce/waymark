@@ -4,7 +4,7 @@ import { SpeedPicker, VideoNotes, savedRate } from './VideoNotes'
 import { Fold } from './Fold'
 import { Check, ChevronLeft, CircleDashed, Download, ExternalLink, Eye, NotebookPen, PlayCircle, Send, SquarePen, X } from 'lucide-react'
 import { api, ApiError, type KhanCheck, type KhanItem, type KhanOutline, type KhanProgress, type KhanQuestion, type KhanTest, type KhanVideo,
-  type PAnswers, type PContent, type Task, fmtMin } from './api'
+  type PAnswers, type PContent, type PSolution, type Task, fmtMin } from './api'
 import type { Ctx } from './App'
 import { busyProps, useBusy, useQuestionFocus } from './interact'
 import { PerseusStatic, PerseusView, Solution } from './Perseus'
@@ -186,7 +186,7 @@ function KhanPractice({ id, onBack, ctx, kolibri, partial }: { id: string; onBac
   const [ans, setAns] = useState<PAnswers>({})
   const [res, setRes] = useState<KhanCheck | null>(null)
   const [hints, setHints] = useState<PContent[]>([])
-  const [revealed, setRevealed] = useState<Record<string, string> | null>(null)
+  const [revealed, setRevealed] = useState<PSolution | null>(null)
   const [progress, setProgress] = useState<KhanProgress | null>(null)
   const [gain, setGain] = useState<{ xp: number; mastered: boolean } | null>(null)
   const [scratch, setScratch] = useState(false)
@@ -389,7 +389,7 @@ export function KhanTestPage({ id, ctx }: { id: number; ctx: Ctx }) {
         {r && (
           <div className={'verdict ' + (r.correct ? 'ok' : 'no')}>
             {r.correct ? <Check size={14} strokeWidth={2} /> : <X size={14} strokeWidth={2} />}
-            <span>{r.correct ? tr('Correct') : <>{tr('Answer')}: <Solution sol={r.solution} inline /></>}</span>
+            <div className="verdict-b">{r.correct ? tr('Correct') : <><span>{tr('Answer')}:</span><Solution sol={r.solution} inline /></>}</div>
           </div>
         )}
         {r && !r.correct && q.hints && q.hints.length > 0 && (

@@ -5,7 +5,7 @@ import rehypeKatex from 'rehype-katex'
 import { rehypeGluePunct } from './mathtex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import type { PAnswer, PAnswers, PContent, PFeedback, PWidget } from './api'
+import type { PAnswer, PAnswers, PContent, PFeedback, PSolution, PWidget } from './api'
 import { Select } from './controls'
 import { t as tr } from './i18n'
 
@@ -228,7 +228,7 @@ function Radio({ name, w, ctx, cls }: { name: string; w: PWidget; ctx: Ctx; cls:
     <span className={'pw-radio' + cls} role={multiple ? 'group' : 'radiogroup'}>
       {multiple && <span className="pw-hint">{typeof w.count === 'number' ? tr('Choose {n} answers', { n: w.count }) : tr('Choose all that apply')}</span>}
       {ch.map((c) => (
-        <button type="button" key={c.i} className={'choice' + (picked.has(c.i) ? ' on' : '')} disabled={ctx.disabled}
+        <button type="button" key={c.i} className={'choice' + (picked.has(c.i) ? ' on' : '') + (fb?.right?.includes(c.i) ? ' right' : '')} disabled={ctx.disabled}
           role={multiple ? 'checkbox' : 'radio'} aria-checked={picked.has(c.i)} onClick={() => toggle(c.i)}>
           <span className={'o' + (multiple ? ' sq' : '')} />
           <span className="pw-choice-t"><Md text={c.content} ctx={ctx} inline /></span>
@@ -276,12 +276,19 @@ export function PerseusStatic({ part }: { part: PContent }) {
   return <PerseusView part={part} answers={{}} set={() => {}} disabled />
 }
 
-/** The right answer(s) for a question, as one line. */
-export function Solution({ sol, inline }: { sol: Record<string, string>; inline?: boolean }): ReactNode {
-  const vals = Object.values(sol).filter(Boolean)
+/** Inline maths sets a fraction at script size, too small to read in the answer line: a value that is one
+ *  formula is set in display style instead. */
+const big = (v: string) => (/^\$[^$]+\$$/.test(v.trim()) ? '$\\displaystyle ' + v.trim().slice(1) : v)
+
+/** The right answer(s) for a question. One value sits on the line; several (a choose-all question, or more
+ *  than one box) are listed one per row so they can't run together. */
+export function Solution({ sol, inline }: { sol: PSolution; inline?: boolean }): ReactNode {
+  const vals = Object.values(sol).flatMap((v) => (Array.isArray(v) ? v : [v])).filter(Boolean)
   if (!vals.length) return null
   const empty = { part: { content: '', widgets: {}, graphie: [] }, answers: {}, set: () => {} }
-  const body = vals.map((v, i) => <span key={i} className="pw-sol-v">{i > 0 && <span className="pw-sol-sep">, </span>}<Md text={v} ctx={empty} inline /></span>)
-  if (inline) return <>{body}</>
+  const body = vals.length === 1
+    ? <span className="pw-sol-v"><Md text={big(vals[0])} ctx={empty} inline /></span>
+    : <ul className="pw-sol-list">{vals.map((v, i) => <li key={i} className="pw-sol-v"><Md text={big(v)} ctx={empty} inline /></li>)}</ul>
+  if (inline) return body
   return <div className="pw-solution"><span className="form-l">{tr('Answer')}</span>{body}</div>
 }

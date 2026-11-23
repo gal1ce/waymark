@@ -1417,6 +1417,8 @@ button.avatar.me-pic { display: grid; place-items: center; padding: 0; border: 0
 .pw-radio .choice { width: 100%; font-size: 16px; color: var(--t1); }
 .pw-radio.ok .choice.on { border-color: oklch(from var(--pos) l c h / 0.55); background: var(--pos-soft); box-shadow: inset 0 -2px 0 oklch(from var(--pos) l c h / 0.4); }
 .pw-radio.bad .choice.on { border-color: oklch(from var(--neg) l c h / 0.55); background: var(--neg-soft); box-shadow: inset 0 -2px 0 var(--neg-line); }
+/* after a test: every right choice is green, picked or not; a wrong pick stays red */
+.pw-radio .choice.right, .pw-radio.bad .choice.on.right { border-color: oklch(from var(--pos) l c h / 0.55); background: var(--pos-soft); box-shadow: inset 0 -2px 0 oklch(from var(--pos) l c h / 0.4); }
 .pw-field .input { height: 40px; font-size: 15px; }
 .pw-field.ok .input { border-color: oklch(from var(--pos) l c h / 0.5); }
 .pw-field.bad .input { border-color: var(--neg-line); }
@@ -1450,8 +1452,13 @@ button.avatar.me-pic { display: grid; place-items: center; padding: 0; border: 0
 .pw-explain > summary { cursor: pointer; color: var(--accent); font-size: 13.5px; }
 .pw-solution { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; padding: 8px 12px; background: var(--s-raised);
   border-radius: var(--r-row); }
-.pw-sol-v { font-size: 15px; }
-.pw-sol-sep { color: var(--t3); margin-right: 4px; }
+.pw-sol-v { font-size: 17px; line-height: 1.5; }
+.pw-sol-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; flex-basis: 100%; }
+.pw-solution .pw-sol-list { flex-basis: auto; }
+/* the right answer in the check line: label, then the answer (a list goes under the label, one per row) */
+.verdict-b { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; }
+.verdict-b .pw-sol-v { color: var(--t1); }
+.verdict-b .pw-sol-list { padding: 4px 0 2px; }
 .linkish { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 
 /* ================================================================= popovers from the top bar */
@@ -1816,6 +1823,7 @@ html.theme-fade, html.theme-fade * { transition: background-color 300ms var(--ea
   font: 500 12px var(--mono); color: var(--t3); border: 1px solid var(--line-strong); border-bottom-width: 2px;
 }
 .sheet-q .pw-radio .choice.on::before { color: var(--accent-text); border-color: var(--accent-line); }
+.sheet-q .pw-radio .choice.right::before { color: var(--pos); border-color: oklch(from var(--pos) l c h / 0.55); }
 .sheet-q .pw-radio .choice .o { display: none; }
 /* the answer line: one ruled line under the problem, the answer written on it */
 .sheet-q .pw-field .input, .sheet-q .pw-expr .input {
