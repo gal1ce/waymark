@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEve
 import { createPortal } from 'react-dom'
 import { Box, CircleAlert, Pencil, RotateCcw, Square } from 'lucide-react'
 import { PlotLabel } from './Graph'
-import { boxFaces, CAM_3D, CAM_FLAT, project, readDiagram, STRESS_CUBE, viewDir, type Cam, type Lbl, type Prim, type Style, type V3 } from './diagram'
+import { boxFaces, CAM_3D, CAM_FLAT, project, readDiagram, STRESS_CUBE, viewDir, type Cam, type Lbl, type Prim, type Style, type V3 } from './diagramcore'
 import { t } from './i18n'
 
 /* ----------------------------------------------------------------- drawing */

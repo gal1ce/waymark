@@ -252,7 +252,7 @@ export type DocBlock = { id: string } & BlockLayout & (
   | ({ type: 'text'; md: string } & TextStyle)
   | ({ type: 'graph'; fns: GraphFn[]; view?: GraphView; look?: GraphLook } & FigBox)
   | ({ type: 'image'; src: string; caption?: string; fit?: Fit } & FigBox)
-  /** a drawing written line by line (diagram.ts), seen from `cam` (azimuth and elevation in degrees) */
+  /** a drawing written line by line (diagramcore.ts), seen from `cam` (azimuth and elevation in degrees) */
   | ({ type: 'diagram'; src: string; cam?: { az: number; el: number } } & FigBox)
   | ({ type: 'canvas'; height?: number } & Board))
 /** Where a picture or graph sits on a page: its size in page pixels, and either a preset alignment or a left offset
