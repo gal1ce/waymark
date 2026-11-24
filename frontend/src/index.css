@@ -562,6 +562,11 @@ select.input { padding-right: 30px; appearance: none; cursor: pointer;
 .figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
 .fig { padding: 20px 24px 20px 0; min-width: 0; }
 .fig + .fig { padding-left: 24px; border-left: 1px solid var(--line); }
+.fig-link { display: block; text-align: left; font: inherit; color: inherit; background: none; border: 0; border-radius: 0; cursor: pointer; transition: background-color var(--d-hover) var(--ease-out); }
+.fig-link:not(.fig + .fig) { border-left: 0; }
+.fig + .fig-link { border-left: 1px solid var(--line); }
+.fig-link:hover .fig-v { color: var(--accent); }
+.fig-link:focus-visible { outline: 2px solid var(--accent-line); outline-offset: -2px; }
 .fig-v { font: 500 32px/1 var(--mono); margin-top: 12px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .fig-v small { font-size: 16px; color: var(--t3); font-weight: 400; letter-spacing: 0; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
@@ -586,7 +591,6 @@ select.input { padding-right: 30px; appearance: none; cursor: pointer;
 
 /* ------------------------------------------------------------ dashboard */
 .dash-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
-.two-col { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; align-items: start; }
 
 /* ------------------------------------------------------------ year graph: a moment */
 .year { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -672,6 +676,12 @@ button.cell:focus-visible { outline-offset: 1px; position: relative; z-index: 1;
 .current.idle { background: var(--s-card); border-color: var(--line); }
 
 .day-grid { display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 22cqi, 380px); gap: 40px; align-items: start; }
+/* Side by side means peers: the rail is the day at a glance, never the longer column, and it stays in view */
+.day-grid > .rail { position: sticky; top: 16px; max-height: calc(100dvh - 120px); overflow-y: auto; scrollbar-width: thin; }
+.day-end { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 4px; align-items: stretch; }
+.day-end > .sec { display: flex; flex-direction: column; margin: 0; }
+.day-end .notes-box { flex: 1; min-height: 96px; }
+.day-end .close-acts { margin-top: auto; }
 .timeline { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .tl-row { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 16px; }
 .tl-time { display: flex; flex-direction: column; gap: 2px; padding-top: 16px; font: 12px var(--mono); color: var(--t2); text-align: right; }
@@ -1282,7 +1292,9 @@ button.avatar.me-pic { display: grid; place-items: center; padding: 0; border: 0
 
 /* ------------------------------------------------------------ responsive: content width */
 @container main (max-width: 960px) {
-  .dash-grid, .day-grid, .two-col, .page.prof { grid-template-columns: minmax(0, 1fr); }
+  .dash-grid, .day-grid, .page.prof { grid-template-columns: minmax(0, 1fr); }
+  .day-grid > .rail { position: static; max-height: none; overflow: visible; order: -1; }   /* the glance first, the day's end last */
+  .day-end { grid-template-columns: minmax(0, 1fr); }
   .day-grid { gap: 32px; }
   .prof-side { position: static; }
   .track-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
