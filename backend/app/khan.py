@@ -724,12 +724,13 @@ def coach_brief(days: int = 21) -> str:
         items, results = json.loads(t["items"]), json.loads(t["results"] or "{}")
         answers = json.loads(t["answers"] or "{}")
         try:
-            name = khan_unit(t["unit_idx"])["name"]
+            u = khan_unit(t["unit_idx"])
+            name = f"{u['course']} · {u['name']}"
         except Exception:  # noqa: BLE001
             name = f"unit {t['unit_idx']}"
         missed = [it for it in items if not (results.get(_key(it)) or {}).get("correct")]
         ok = (t["score"] or 0) >= 90
-        lines.append(f"Unit test #{t['id']} \"{name}\" on {t['date']}: {t['score']:g}% (pass mark 90%, "
+        lines.append(f"Maths (Khan Academy) unit test #{t['id']} \"{name}\" on {t['date']}: {t['score']:g}% (pass mark 90%, "
                      f"{'passed' if ok else 'NOT passed, retake needed'}); {len(items) - len(missed)}/{len(items)} right. "
                      f"Review page with every question and worked solution: #/khan-test/{t['id']}")
         by_ex: dict[str, list[dict]] = {}
@@ -755,7 +756,7 @@ def coach_brief(days: int = 21) -> str:
                              f"{_given(item, answers.get(k) or {})} | right answer: {right}")
     if not lines:
         return ""
-    return ("[KHAN UNIT TESTS] The user's latest Khan unit tests (already submitted; the user has seen the answers and "
+    return ("[KHAN UNIT TESTS] The user's latest Khan Academy MATHS unit tests (already submitted; the user has seen the answers and "
             "worked solutions on the review page). Use them to steer the user: name the exact weak exercises, go through "
             "a missed question with them (ask them to redo it and say where they went wrong before you explain the step), "
             "and send them to practise those exercises in the day's lessons + exercises task before a retake.\n"
