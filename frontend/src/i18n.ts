@@ -456,7 +456,7 @@ const TR = {
   'Overview': 'Genel bakış', 'Today\'s plan': 'Bugünün planı', 'In progress': 'Sürüyor', 'Up next': 'Sıradaki', 'Continue': 'Devam et', 'Start': 'Başla',
   'Thursday or Friday.': 'Perşembe ya da cuma.', 'No study today, the next day opens in the morning': 'Bugün çalışma yok, sonraki gün sabah açılır',
   'No open day for today': 'Bugün için açık gün yok', 'This week': 'Bu hafta', 'target {h}': 'hedef {h}', 'chapters': 'bölüm',
-  'Open sticking points': 'Açık takılma noktaları', 'Last end-of-day test': 'Son gün sonu testi',
+  'Open sticking points': 'Açık takılma noktaları', 'Last end-of-day test': 'Son gün sonu testi', 'none yet': 'henüz yok',
   'No tests yet. Each day ends with a closed-book test': 'Henüz test yok. Her gün kitaplar kapalı bir testle biter',
   'Previous month': 'Önceki ay', 'This month': 'Bu ay', 'Next month': 'Sonraki ay', 'past, not closed': 'geçmiş, kapanmamış', 'locked': 'kilitli', 'Thu–Fri': 'Per–Cum',
   'Study sheet': 'Çalışma sayfası', 'Hint {n}': '{n}. ipucu', 'Locked': 'Kilitli', 'Keypad': 'Tuş takımı', 'Hide question': 'Soruyu gizle',

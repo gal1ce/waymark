@@ -70,21 +70,17 @@ export default function Dashboard({ ctx }: { ctx: Ctx }) {
             <Fig key={x.key} label={x.label} value={<>{x.passed}<small>/{x.total}</small></>}
               note={x.current ? tr('now: {unit}', { unit: x.current }) : tr('units passed')} />
           ))}
+          <Fig label={tr('Last end-of-day test')}
+            value={d.last_test ? <>{d.last_test.score}<small>/{d.last_test.max}</small></> : '–'}
+            note={d.last_test ? fmtDate(d.last_test.date) : tr('none yet')}
+            onClick={d.last_test ? () => ctx.go({ kind: 'test', id: d.last_test!.id }) : undefined} />
         </div>
       )}
 
-      <div className="two-col">
-        <Section title={tr('Open sticking points')} meta={d ? d.stuck.length : undefined}>
-          <StuckList items={d?.stuck ?? []} canEdit={false} current={null} ctx={ctx} showDate />
-        </Section>
-        <Section title={tr('Last end-of-day test')}>
-          {d?.last_test
-            ? <button className="row-link" onClick={() => ctx.go({ kind: 'test', id: d.last_test!.id })}>
-                <span>{fmtDate(d.last_test.date)}</span><b className="mono">{d.last_test.score}/{d.last_test.max}</b><ArrowRight size={14} strokeWidth={1.5} />
-              </button>
-            : <div className="empty">{tr('No tests yet. Each day ends with a closed-book test')}</div>}
-        </Section>
-      </div>
+      {/* the open sticking points get the full width; the last test is one figure in the row above */}
+      <Section title={tr('Open sticking points')} meta={d ? d.stuck.length : undefined}>
+        <StuckList items={d?.stuck ?? []} canEdit={false} current={null} ctx={ctx} showDate />
+      </Section>
     </div>
   )
 }

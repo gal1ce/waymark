@@ -96,14 +96,13 @@ export function Stat({ label, value, note }: { label: string; value: ReactNode; 
 }
 
 /** One figure in a hairline-divided strip (`.figures`): label, number, what it compares to. */
-export function Fig({ label, value, note }: { label: string; value: ReactNode; note?: ReactNode }) {
-  return (
-    <div className="fig">
-      <div className="stat-l">{label}</div>
-      <div className="fig-v">{value}</div>
-      {note && <div className="stat-n">{note}</div>}
-    </div>
-  )
+export function Fig({ label, value, note, onClick }: { label: string; value: ReactNode; note?: ReactNode; onClick?: () => void }) {
+  const body = <>
+    <div className="stat-l">{label}</div>
+    <div className="fig-v">{value}</div>
+    {note && <div className="stat-n">{note}</div>}
+  </>
+  return onClick ? <button type="button" className="fig fig-link" onClick={onClick}>{body}</button> : <div className="fig">{body}</div>
 }
 
 /** Value against its pass line. The notch marks the threshold. */

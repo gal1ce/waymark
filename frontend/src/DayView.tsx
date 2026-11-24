@@ -125,14 +125,20 @@ export default function DayView({ date, ctx }: { date: string; ctx: Ctx }) {
                   <button type="button" className="link" onClick={() => setFilter(NO_FILTER)}>{tr('Clear filters')}</button>
                 </div>
               )}
+              {/* the day's own end follows its last block: notes and closing, side by side as equals */}
+              {(active || day.status === 'closed' || day.status === 'past') && (
+                <div className="day-end">
+                  <DayNotes day={day} ctx={ctx} />
+                  {active && <CloseDay day={day} ctx={ctx} />}
+                </div>
+              )}
             </div>
+            {/* the rail is the day at a glance: shorter than the blocks, and it stays in view while they scroll */}
             <div className="stack rail">
               <DaySummary day={day} spent={spent} />
               <Section title={tr('Sticking points')} meta={tr('{n} open', { n: (day.stuck ?? []).filter((s) => !s.resolved).length })}>
                 <StuckList items={day.stuck ?? []} canEdit={active} current={current} ctx={ctx} />
               </Section>
-              {(active || day.status === 'closed' || day.status === 'past') && <DayNotes day={day} ctx={ctx} />}
-              {active && <CloseDay day={day} ctx={ctx} />}
             </div>
           </div>
         </>

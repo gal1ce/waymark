@@ -74,27 +74,25 @@ export default function ProgressView({ ctx }: { ctx: Ctx }) {
         <Topics rows={p.topics} ctx={ctx} />
       </Section>
 
-      <div className="two-col">
-        <Section title={tr('Thresholds')} meta={tr('from the roadmap')}>
-          <table className="tbl">
-            <thead><tr><th>{tr('Measure')}</th><th className="r">{tr('Threshold')}</th><th className="r">{tr('Last')}</th><th className="r">{tr('Passed')}</th><th className="r">{tr('Failed')}</th></tr></thead>
-            <tbody>
-              {p.thresholds.map((t) => (
-                <tr key={t.key} data-ask={`${t.label} threshold: ${t.threshold}${t.unit}${t.note ? ` (${t.note})` : ''}`}>
-                  <td>{tx(t.label)}{t.note && <div className="t3 small">{t.note}</div>}</td>
-                  <td className="r mono">{fmtV(t.threshold, t.max, t.unit)}</td>
-                  <td className={'r mono' + (t.last != null && t.last < t.threshold ? ' neg' : '')}>{t.last != null ? fmtV(t.last, t.max, t.unit) : '–'}</td>
-                  <td className="r mono">{t.passed}</td>
-                  <td className="r mono">{t.failed}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Section>
-        <Section title={tr('Sticking points')} meta={tr('{n} open', { n: p.stuck_open })}>
-          <StuckWeeks weeks={p.stuck_weeks} />
-        </Section>
-      </div>
+      <Section title={tr('Thresholds')} meta={tr('from the roadmap')}>
+        <table className="tbl">
+          <thead><tr><th>{tr('Measure')}</th><th className="r">{tr('Threshold')}</th><th className="r">{tr('Last')}</th><th className="r">{tr('Passed')}</th><th className="r">{tr('Failed')}</th></tr></thead>
+          <tbody>
+            {p.thresholds.map((t) => (
+              <tr key={t.key} data-ask={`${t.label} threshold: ${t.threshold}${t.unit}${t.note ? ` (${t.note})` : ''}`}>
+                <td>{tx(t.label)}{t.note && <div className="t3 small">{t.note}</div>}</td>
+                <td className="r mono">{fmtV(t.threshold, t.max, t.unit)}</td>
+                <td className={'r mono' + (t.last != null && t.last < t.threshold ? ' neg' : '')}>{t.last != null ? fmtV(t.last, t.max, t.unit) : '–'}</td>
+                <td className="r mono">{t.passed}</td>
+                <td className="r mono">{t.failed}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Section>
+      <Section title={tr('Sticking points')} meta={tr('{n} open', { n: p.stuck_open })}>
+        <StuckWeeks weeks={p.stuck_weeks} />
+      </Section>
     </div>
   )
 }
