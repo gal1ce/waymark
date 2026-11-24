@@ -16,7 +16,6 @@ load_dotenv(env_file())
 STUDY_REPO = Path(os.environ.get("CTU_STUDY_REPO", HOME / "quaimlres_road"))
 COACH_MD = Path(os.environ.get("CTU_COACH_MD", HOME / "Custom/Projects/ctu-plan/COACH.md"))
 KINTSUGI = Path(os.environ.get("CTU_KINTSUGI", HOME / "Custom/Projects/kintsugi"))
-PLAN_PDF_TEXT = APP_ROOT / "backend" / "data" / "plan.txt"
 # Where an install keeps what it records: the database, notebook pictures, the coach's and the user's pictures and the
 # automatic backups all sit in one data folder, outside the app's own files, so deleting or updating the app never takes
 # them. data_dir_for (app/paths.py) picks it; installs from before the data folder keep backend/data/ctu.db.
@@ -26,6 +25,9 @@ DB_PATH = (Path(os.path.expanduser(os.environ["CTU_DB"])) if os.environ.get("CTU
            else data_dir_for(dict(os.environ), HOME, LEGACY_DB, os.name == "nt") / "ctu.db")
 # everything else the app records lives next to the database
 DATA_DIR = DB_PATH.parent
+# the CTU plan's source text: in the data folder (the packaged program has no backend/data), else the checkout's copy
+PLAN_PDF_TEXT = next((p for p in (DATA_DIR / "plan.txt", APP_ROOT / "backend" / "data" / "plan.txt") if p.is_file()),
+                     DATA_DIR / "plan.txt")
 
 # Khan Academy content comes through Kolibri (Learning Equality's offline platform, Khan's partner for it):
 # ./setup-khan.sh installs it and fetches the channel; the app reads the files it downloads.
