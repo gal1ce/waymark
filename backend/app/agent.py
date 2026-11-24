@@ -396,10 +396,13 @@ def _today_block() -> str:
                         links[r["label"]] = u
         if links:
             lines.append("  links: " + "; ".join(f"[{k}]({v})" for k, v in links.items()))
-    stuck = db.q("SELECT id,summary,task_id FROM stuck WHERE resolved=0 ORDER BY id DESC LIMIT 8")
+    # each one names the block its task sits in, so a score is never read as belonging to the block scheduled now
+    stuck = db.q("SELECT s.id, s.summary, s.task_id, s.date, b.title AS block FROM stuck s LEFT JOIN tasks t ON t.id = s.task_id "
+                 "LEFT JOIN blocks b ON b.id = t.block_id WHERE s.resolved=0 ORDER BY s.id DESC LIMIT 8")
     if stuck:
-        lines.append("Open sticking points: " + "; ".join(
-            f"#{s['id']} {s['summary']}" + (f" (task #{s['task_id']})" if s["task_id"] else "") for s in stuck))
+        lines.append("Open sticking points (each in its own subject; not about the block scheduled now unless it says so): " + "; ".join(
+            f"#{s['id']} {s['summary']}" + (f" ({s['block']}, task #{s['task_id']}, {s['date']})" if s["block"]
+                                             else f" (task #{s['task_id']})" if s["task_id"] else "") for s in stuck))
     tests = db.q("SELECT id,kind,status,score,max FROM tests WHERE date=? ORDER BY id", (ds,))
     if tests:
         lines.append("Tests today: " + "; ".join(
