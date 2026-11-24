@@ -433,6 +433,11 @@ async def _llm_plan(d: date, draft: dict, context: str) -> tuple[dict, str] | No
     plan[evening] = [_to_internal(t) for t in out["evening"]]
     plan = _valid({**plan, "evening": plan[evening]})
     plan[evening] = plan.pop("evening")
+    # a block the model left empty (or whose tasks were all dropped) keeps the draft: a block is never planned bare
+    for key, tasks in draft.items():
+        if key != "test" and tasks and not plan.get(key):
+            log.info("planner: %s came back empty for %s; keeping the draft", key, d)
+            plan[key] = tasks
     plan["test"] = _test_tasks()
     return plan, out["adapt_note"]
 

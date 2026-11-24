@@ -218,7 +218,7 @@ def _smoke(port: int) -> int:
 
     from .main import app
 
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_config=None))
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_config=None, timeout_graceful_shutdown=3))
     result: dict[str, object] = {}
 
     def probe() -> None:
@@ -301,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
     from .main import app
 
     updates.cleanup()
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_config=None))
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_config=None, timeout_graceful_shutdown=3))
     updates.on_restart = lambda: setattr(server, "should_exit", True)
     updates.port = port
 
