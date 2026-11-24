@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  CalendarCheck, CalendarDays, ChevronRight, CircleAlert, ClipboardCheck, Copy, Flame, House,
-  MessageSquareText, Monitor, Moon, NotebookPen, Settings as SettingsIcon, Sun, TrendingUp, UserRound, Zap,
+  ChevronRight, CircleAlert, Copy, Flame, House,
+  MessageSquareText, Monitor, Moon, Settings as SettingsIcon, Sun, UserRound, Zap,
 } from 'lucide-react'
+import {
+  CalendarBlank as PhCalendar, CalendarCheck as PhToday, ClipboardText as PhTests, House as PhHome, Notebook as PhNotes,
+  NotePencil as PhNewChat, SidebarSimple as PhSidebar, TrendUp as PhProgress,
+} from '@phosphor-icons/react'
 import { api, ApiError, fmtDate, fmtDur, setWeekBase, type Day, type Meta, type Notice, type Overview, type UpdateInfo, type Xp } from './api'
 import Dashboard from './Dashboard'
 import DayView from './DayView'
@@ -13,7 +17,8 @@ import TestPage, { TestsList } from './TestPage'
 import { KhanTestPage } from './Khan'
 import Reader from './Reader'
 import BeejPage from './BeejPage'
-import { AskPopup, CoachPanel } from './Coach'
+import { AskPopup, CoachAvatar, CoachPanel, Recents, startNewChat } from './Coach'
+import NixPage from './Nix'
 import Tip from './Tip'
 import Notes from './Notes'
 import SettingsView from './SettingsView'
@@ -25,7 +30,7 @@ import { t, t as tApp, useLang, type Lang } from './i18n'
 import { ConfirmDialog, NoticeBell, Toasts, type ConfirmOpts, type Toast } from './Notices'
 
 export type View =
-  | { kind: 'dash' } | { kind: 'day'; date: string } | { kind: 'calendar'; month?: string } | { kind: 'progress' }
+  | { kind: 'nix'; id?: number } | { kind: 'dash' } | { kind: 'day'; date: string } | { kind: 'calendar'; month?: string } | { kind: 'progress' }
   | { kind: 'tests' } | { kind: 'test'; id: number } | { kind: 'profile' } | { kind: 'khanTest'; id: number }
   | { kind: 'notes'; id?: number } | { kind: 'settings' } | { kind: 'setup' } | { kind: 'beej'; page: string; sec?: string }
 
@@ -61,6 +66,7 @@ export type Ctx = {
 // ------------------------------------------------------------- hash routing
 const toHash = (v: View): string => {
   switch (v.kind) {
+    case 'nix': return v.id ? `#/nix/${v.id}` : '#/nix'
     case 'dash': return '#/overview'
     case 'day': return `#/day/${v.date}`
     case 'calendar': return v.month ? `#/calendar/${v.month}` : '#/calendar'
@@ -75,7 +81,7 @@ const toHash = (v: View): string => {
     case 'beej': return `#/beej/${v.page}` + (v.sec ? `/${v.sec}` : '')
   }
 }
-const fromHash = (h: string): View => {
+export const fromHash = (h: string): View => {
   const [, a, b, c] = h.replace(/^#/, '').split('/')
   // old Turkish routes still resolve
   if ((a === 'day' || a === 'gun') && b) return { kind: 'day', date: b }
@@ -90,6 +96,8 @@ const fromHash = (h: string): View => {
   if (a === 'settings') return { kind: 'settings' }
   if (a === 'setup') return { kind: 'setup' }
   if (a === 'beej' && b) return { kind: 'beej', page: b, sec: c }
+  // the app opens on the coach; #/overview is Home
+  if (!a || a === 'nix') return { kind: 'nix', id: b ? Number(b) || undefined : undefined }
   return { kind: 'dash' }
 }
 
@@ -137,6 +145,9 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [reader, setReader] = useState<string | null>(null)
   const [coachOpen, setCoachOpen] = useState(() => store.get('ctu.coach', false))
+  // the side: a wide sidebar (new chat, the pages, recent conversations) or the slim rail of icons
+  const [navWide, setNavWide] = useState(() => store.get('ctu.navWide', true))
+  useEffect(() => store.set('ctu.navWide', navWide), [navWide])
   const [coachW, setCoachW] = useState(() => num.get('ctu.coachW', COACH_W))
   const [resizing, setResizing] = useState(false)
   const drag0 = useRef(0)
@@ -210,10 +221,10 @@ export default function App() {
   // so "Open in panel" from a test shows the panel beside the sheet instead of behind it
   useEffect(() => {
     const b = document.body
-    b.classList.toggle('coach-on', coachOpen)
+    b.classList.toggle('coach-on', coachOpen && view.kind !== 'nix')
     b.dataset.coach = layout.coach
     b.style.setProperty('--sheet-coach', `min(${clampCoach(coachW)}px, 50vw)`)
-  }, [coachOpen, coachW, layout.coach])
+  }, [coachOpen, coachW, layout.coach, view.kind])
   useEffect(() => num.set('ctu.coachW', coachW), [coachW])
 
   // shared data: meta, overview, today's day (used by the top bar, dashboard and coach)
@@ -292,16 +303,30 @@ export default function App() {
     notify, confirm, run, go, openReader: setReader, refresh, ask, setExam, tick, version, meta, ov, today, todayDate, theme, setTheme, layout, setLayout, lang, setLang, setCrumb, showUpdate: setUpdate,
   }
   const current = today?.status === 'active' ? today.current ?? null : null
+  const pane = (v: View): ReactNode => {
+    if (v.kind === 'day') return <DayView date={v.date || todayDate} ctx={ctx} />
+    if (v.kind === 'test') return <TestPage id={v.id} ctx={ctx} version={version} />
+    if (v.kind === 'khanTest') return <KhanTestPage id={v.id} ctx={ctx} />
+    if (v.kind === 'notes') return <Notes id={v.id} ctx={ctx} />
+    if (v.kind === 'tests') return <TestsList ctx={ctx} version={version} />
+    if (v.kind === 'calendar') return <CalendarView month={v.month} ctx={ctx} />
+    if (v.kind === 'progress') return <ProgressView ctx={ctx} />
+    if (v.kind === 'beej') return <BeejPage page={v.page} sec={v.sec} ctx={ctx} />
+    return <Dashboard ctx={ctx} />
+  }
   const noPlan = !!meta && !meta.plan.ready
+  const onNix = view.kind === 'nix' && !noPlan
+  const sideCoach = coachOpen && !onNix
 
-  const ic = { size: 20, strokeWidth: 1.6 }
+  const ph = { size: 20 }
   const nav: { label: string; icon: ReactNode; v: View; on: boolean }[] = [
-    { label: t('Home'), icon: <House {...ic} />, v: { kind: 'dash' }, on: view.kind === 'dash' },
-    { label: t('Today'), icon: <CalendarCheck {...ic} />, v: { kind: 'day', date: todayDate }, on: view.kind === 'day' && (!view.date || view.date === todayDate) },
-    { label: t('Calendar'), icon: <CalendarDays {...ic} />, v: { kind: 'calendar' }, on: view.kind === 'calendar' || (view.kind === 'day' && !!view.date && view.date !== todayDate) },
-    { label: t('Tests'), icon: <ClipboardCheck {...ic} />, v: { kind: 'tests' }, on: view.kind === 'tests' || view.kind === 'test' || view.kind === 'khanTest' },
-    { label: t('Notes'), icon: <NotebookPen {...ic} />, v: { kind: 'notes' }, on: view.kind === 'notes' },
-    { label: t('Progress'), icon: <TrendingUp {...ic} />, v: { kind: 'progress' }, on: view.kind === 'progress' },
+    { label: meta?.coach_name || t('Coach'), icon: <CoachAvatar ctx={ctx} size="nav" />, v: { kind: 'nix' }, on: view.kind === 'nix' },
+    { label: t('Home'), icon: <PhHome {...ph} />, v: { kind: 'dash' }, on: view.kind === 'dash' },
+    { label: t('Today'), icon: <PhToday {...ph} />, v: { kind: 'day', date: todayDate }, on: view.kind === 'day' && (!view.date || view.date === todayDate) },
+    { label: t('Calendar'), icon: <PhCalendar {...ph} />, v: { kind: 'calendar' }, on: view.kind === 'calendar' || (view.kind === 'day' && !!view.date && view.date !== todayDate) },
+    { label: t('Tests'), icon: <PhTests {...ph} />, v: { kind: 'tests' }, on: view.kind === 'tests' || view.kind === 'test' || view.kind === 'khanTest' },
+    { label: t('Notes'), icon: <PhNotes {...ph} />, v: { kind: 'notes' }, on: view.kind === 'notes' },
+    { label: t('Progress'), icon: <PhProgress {...ph} />, v: { kind: 'progress' }, on: view.kind === 'progress' },
   ]
   const extra: Record<string, string> = { profile: t('Profile'), settings: t('Settings'), setup: t('Plan setup'), beej: t("Beej's Guide to C") }
   const page = nav.find((n) => n.on)?.label ?? extra[view.kind] ?? ''
@@ -309,15 +334,15 @@ export default function App() {
     : view.kind === 'test' ? t('Test {n}', { n: view.id }) : view.kind === 'khanTest' ? t('Unit test') : null)
 
   return (
-    <div className={`shell nav-${layout.nav} coach-${layout.coach}${coachOpen ? ' coach-on' : ''}${resizing ? ' resizing' : ''}`}
-      style={{ '--coach-w': `${coachOpen ? clampCoach(coachW) : coachW}px` } as React.CSSProperties}>
+    <div className={`shell nav-${layout.nav}${navWide ? ' nav-wide' : ''} coach-${layout.coach}${sideCoach ? ' coach-on' : ''}${resizing ? ' resizing' : ''}`}
+      style={{ '--coach-w': `${sideCoach ? clampCoach(coachW) : coachW}px` } as React.CSSProperties}>
       <header className="topbar">
         <button className="wordmark" onClick={() => go({ kind: 'dash' })} aria-label={t('Waymark, home')}>
           <BrandMark /><span className="wm-text">Way<em>mark</em></span>
         </button>
         {page && (
           <nav className="crumbs" aria-label={t('You are here')}>
-            {view.kind !== 'dash' && <><button onClick={() => go({ kind: 'dash' })}><House size={14} strokeWidth={1.6} />{t('Home')}</button><ChevronRight size={13} strokeWidth={1.6} /></>}
+            {view.kind !== 'dash' && view.kind !== 'nix' && <><button onClick={() => go({ kind: 'dash' })}><House size={14} strokeWidth={1.6} />{t('Home')}</button><ChevronRight size={13} strokeWidth={1.6} /></>}
             {sub ? (
               <>
                 <button onClick={() => go(nav.find((n) => n.on)?.v ?? (view.kind === 'notes' ? { kind: 'notes' } : view))}>{page}</button>
@@ -340,26 +365,43 @@ export default function App() {
             aria-label={t('Switch light or dark')} title={theme === 'system' ? t('Theme follows the system · click to pick') : t('Switch light or dark')}>
             {document.documentElement.dataset.theme === 'dark' ? <Sun size={18} strokeWidth={1.6} /> : <Moon size={18} strokeWidth={1.6} />}
           </button>
-          <button className={'btn ghost sm pill' + (coachOpen ? ' on' : '')} onClick={() => setCoachOpen((o) => !o)} aria-pressed={coachOpen} title={t('Coach panel  ]')}>
-            <MessageSquareText size={15} strokeWidth={1.6} />{meta?.coach_name || t('Coach')}
-          </button>
+          {!onNix && (
+            <button className={'btn ghost sm pill' + (coachOpen ? ' on' : '')} onClick={() => setCoachOpen((o) => !o)} aria-pressed={coachOpen} title={t('Coach panel  ]')}>
+              <MessageSquareText size={15} strokeWidth={1.6} />{meta?.coach_name || t('Coach')}
+            </button>
+          )}
           <AvatarMenu ctx={ctx} />
         </div>
       </header>
 
       <aside className="side" aria-label={t('Navigation')}>
+        {/* the sidebar's own top: the brand and the toggle, on the top bar's line; collapsed, the toggle shows on hover */}
+        <div className="side-top">
+          <button className="wordmark side-brand" onClick={() => go({ kind: 'dash' })} aria-label={t('Waymark, home')} tabIndex={navWide ? 0 : -1}>
+            <BrandMark /><span className="wm-text">Way<em>mark</em></span>
+          </button>
+          <button className="icon-btn side-toggle" onClick={() => setNavWide((w) => !w)} aria-label={navWide ? t('Collapse the sidebar') : t('Expand the sidebar')} title={navWide ? t('Collapse the sidebar') : t('Expand the sidebar')}>
+            <PhSidebar size={20} />
+          </button>
+        </div>
+        {!noPlan && (
+          <button className="nav-row nav-new" onClick={() => { go({ kind: 'nix' }); startNewChat() }} title={t('New chat')}>
+            <PhNewChat {...ph} /><span className="nav-label">{t('New chat')}</span>
+          </button>
+        )}
         <nav className="nav">
           {nav.map((n) => (
-            <button key={n.label} className={'nav-row' + (n.on ? ' on' : '')}
+            <button key={n.label} className={'nav-row' + (n.on ? ' on' : '')} title={navWide ? undefined : n.label}
               aria-current={n.on ? 'page' : undefined} onClick={() => go(n.v)}>
               {n.icon}<span className="nav-label">{n.label}</span>
             </button>
           ))}
         </nav>
+        {!noPlan && <Recents ctx={ctx} active={view.kind === 'nix' ? view.id ?? null : null} onOpen={(id) => go({ kind: 'nix', id })} />}
       </aside>
 
       <div className="center">
-        {coachOpen && (
+        {sideCoach && (
           <Resizer edge={layout.coach} label={t('Resize coach panel')}
             onReset={() => setCoachW(COACH_W)}
             onStep={(d) => setCoachW((w) => clampCoach(clampCoach(w) + (layout.coach === 'left' ? d : -d)))}
@@ -369,10 +411,11 @@ export default function App() {
               if (ph === 'end') setResizing(false)
             }} />
         )}
-        <main className="main" ref={mainRef} onContextMenu={onContext}>
+        <main className={'main' + (onNix ? ' main-nix' : '')} ref={mainRef} onContextMenu={onContext}>
           <Warnings meta={meta} ctx={ctx} />
           {/* a new install has no plan yet: the pages that show one ask for it to be set up first */}
-          {(view.kind === 'setup' || (noPlan && (view.kind === 'dash' || view.kind === 'day' || view.kind === 'calendar'))) && <Setup ctx={ctx} />}
+          {(view.kind === 'setup' || (noPlan && (view.kind === 'nix' || view.kind === 'dash' || view.kind === 'day' || view.kind === 'calendar'))) && <Setup ctx={ctx} />}
+          {onNix && <NixPage ctx={ctx} current={current} hasKey={!!meta?.has_api_key} locked={exam} render={pane} openId={view.kind === 'nix' ? view.id : undefined} />}
           {!noPlan && view.kind === 'dash' && <Dashboard ctx={ctx} />}
           {!noPlan && view.kind === 'day' && todayDate && <DayView date={view.date || todayDate} ctx={ctx} />}
           {!noPlan && view.kind === 'calendar' && <CalendarView month={view.month} ctx={ctx} />}
@@ -388,7 +431,7 @@ export default function App() {
         <Scrollbar key={view.kind + ('id' in view ? String(view.id) : '')} target={mainRef} />
       </div>
 
-      {coachOpen && <CoachPanel ctx={ctx} current={current} hasKey={!!meta?.has_api_key} locked={exam} onClose={() => setCoachOpen(false)} />}
+      {sideCoach && <CoachPanel ctx={ctx} current={current} hasKey={!!meta?.has_api_key} locked={exam} onClose={() => setCoachOpen(false)} />}
 
       {menu && (
         <>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useDrag } from './drag'
 import Markdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
@@ -15,6 +15,7 @@ import { squareAvatar } from './picture'
 import { t as tr, tx, type Key } from './i18n'
 import { Scrollbar } from './Scrollbar'
 import { Slider } from './controls'
+import { NixFly, Topo } from './Scenery'
 
 // ------------------------------------------------------------------ active conversation (per day, per browser)
 const CONVO_KEY = 'ctu.convo'
@@ -28,6 +29,11 @@ function storedConvo(today: string | undefined): number | null {
 function storeConvo(today: string | undefined, id: number | null) {
   try { if (id && today) localStorage.setItem(CONVO_KEY, `${today}:${id}`); else localStorage.removeItem(CONVO_KEY) } catch { /* private mode */ }
 }
+const NEW_EV = 'ctu:newchat'
+const LIST_EV = 'ctu:convos'
+/** The sidebar's "New chat": the Nix page starts a fresh conversation. */
+export function startNewChat() { requestAnimationFrame(() => window.dispatchEvent(new Event(NEW_EV))) }
+
 /** Tell an open panel to switch to this conversation (used by the right-click popup). */
 export function showConvo(today: string | undefined, id: number) {
   storeConvo(today, id)
@@ -36,7 +42,11 @@ export function showConvo(today: string | undefined, id: number) {
 
 // ------------------------------------------------------------------ markdown with direct links
 /** App links (#/day/…, #/test/3, #/read/<file>) navigate inside the app; anything else opens in a new tab. */
+/** On the Nix page, links to the app's own pages open beside the chat: the handler says whether it took the link. */
+export const AppLinkCtx = createContext<((href: string) => boolean) | null>(null)
+
 export function CoachMd({ text, ctx, onNav }: { text: string; ctx: Ctx; onNav?: () => void }) {
+  const take = useContext(AppLinkCtx)
   return (
     <Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex, rehypeGluePunct]} components={{
       ...MD_CODE,
@@ -46,7 +56,7 @@ export function CoachMd({ text, ctx, onNav }: { text: string; ctx: Ctx; onNav?: 
             if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return
             e.preventDefault()
             if (href.startsWith('#/read/')) ctx.openReader(decodeURIComponent(href.slice(7)))
-            else location.hash = href
+            else if (!take?.(href)) location.hash = href
             onNav?.()
           }}>{children}</a>
         }
@@ -156,15 +166,14 @@ function useTurn(ctx: Ctx, key: string) {
   return { draft: t.draft, pending: t.pending, userId: t.userId, run, stop, end }
 }
 
-/** The coach's face: the picture set in its settings, or its initial on the ink-blue disc. */
-export function CoachAvatar({ ctx, size, busy }: { ctx: Ctx; size?: 'sm' | 'big'; busy?: boolean }) {
-  const name = ctx.meta?.coach_name || 'Coach'
+/** The coach's face: the picture set in its settings, or Nix the firefly on a night-blue disc. */
+export function CoachAvatar({ ctx, size, busy }: { ctx: Ctx; size?: 'xs' | 'sm' | 'nav' | 'big' | 'hero'; busy?: boolean }) {
   const src = ctx.meta?.coach_avatar
   const [broken, setBroken] = useState<string | null>(null)
   const pic = src && broken !== src
   return (
-    <span className={'coach-av' + (size ? ' ' + size : '') + (busy ? ' busy' : '') + (pic ? ' pic' : '')} aria-hidden>
-      {pic ? <img src={src} alt="" draggable={false} onError={() => setBroken(src)} /> : name.slice(0, 1).toUpperCase()}
+    <span className={'coach-av' + (size ? ' ' + size : '') + (busy ? ' busy' : '') + (pic ? ' pic' : ' mascot')} aria-hidden>
+      {pic ? <img src={src} alt="" draggable={false} onError={() => setBroken(src)} /> : <img src="/nix/avatar.webp" alt="" draggable={false} />}
     </span>
   )
 }
@@ -252,13 +261,29 @@ function CopyBtn({ text }: { text: string }) {
 const dayLabel = (ds: string, today: string) => {
   if (ds === today) return tr('Today')
   const y = new Date(today + 'T12:00:00'); y.setDate(y.getDate() - 1)
+  if (Number.isNaN(y.getTime())) return fmtDate(ds)   // today not loaded yet
   if (ds === y.toISOString().slice(0, 10)) return tr('Yesterday')
   return fmtDate(ds)
 }
 
 // ------------------------------------------------------------------ conversation list
-function ConvoList({ list, today, active, onOpen, onNew, ctx, reload }: {
-  list: Convo[]; today: string; active: number | null; onOpen: (id: number) => void; onNew: () => void; ctx: Ctx; reload: () => void
+/** The sidebar's recent conversations: grouped by day, rename and delete on hover; opening one goes to the Nix page. */
+export function Recents({ ctx, active, onOpen }: { ctx: Ctx; active: number | null; onOpen: (id: number) => void }) {
+  const [list, setList] = useState<Convo[]>([])
+  const load = useCallback(() => { api.convos().then((x) => setList(x.convos)).catch(() => {}) }, [])
+  useEffect(() => { load() }, [load, ctx.version])
+  useEffect(() => { window.addEventListener(LIST_EV, load); return () => window.removeEventListener(LIST_EV, load) }, [load])
+  if (!list.length) return null
+  return (
+    <div className="side-recents" aria-label={tr('Recent conversations')}>
+      <div className="side-recents-h">{tr('Recents')}</div>
+      <ConvoList list={list} today={ctx.meta?.today ?? ''} active={active} ctx={ctx} reload={() => { load(); window.dispatchEvent(new Event(LIST_EV)) }} onOpen={onOpen} onNew={() => {}} hideNew />
+    </div>
+  )
+}
+
+function ConvoList({ list, today, active, onOpen, onNew, ctx, reload, hideNew }: {
+  list: Convo[]; today: string; active: number | null; onOpen: (id: number) => void; onNew: () => void; ctx: Ctx; reload: () => void; hideNew?: boolean
 }) {
   const [edit, setEdit] = useState<{ id: number; title: string } | null>(null)
   const groups = useMemo(() => {
@@ -274,7 +299,7 @@ function ConvoList({ list, today, active, onOpen, onNew, ctx, reload }: {
   }
   return (
     <div className="convos">
-      <button className="btn sm convo-new" onClick={onNew}><Plus size={14} strokeWidth={1.5} />{tr('New chat for today')}</button>
+      {!hideNew && <button className="btn sm convo-new" onClick={onNew}><Plus size={14} strokeWidth={1.5} />{tr('New chat for today')}</button>}
       {groups.length === 0 && <div className="empty">{tr('No conversations yet')}</div>}
       {groups.map(([d, cs]) => (
         <div key={d} className="convo-group">
@@ -479,12 +504,48 @@ const hello = () => { const h = new Date().getHours(); return tr(h < 5 ? 'Up lat
 
 // ------------------------------------------------------------------ panel
 /** Toggleable right panel: conversations, the streamed thread and the coach's settings. */
-export function CoachPanel({ ctx, current, hasKey, locked, onClose }: { ctx: Ctx; current: Task | null; hasKey: boolean; locked: boolean; onClose: () => void }) {
+/** The empty box shows what you could ask: one example is typed out, held, then erased for the next, like someone
+ *  thinking aloud. The first line is the plain prompt; with reduced motion it simply stays. */
+function useTyping(lines: string[], on: boolean): string {
+  const [text, setText] = useState(lines[0] ?? '')
+  const key = lines.join('\n')
+  useEffect(() => {
+    setText(lines[0] ?? '')
+    if (!on || lines.length < 2) return
+    let i = 0, n = lines[0].length, dir = -1, t = 0
+    const step = () => {
+      if (dir < 0) {
+        if (n > 0) { n--; setText(lines[i].slice(0, n)); t = window.setTimeout(step, 26) }
+        else { i = (i + 1) % lines.length; dir = 1; t = window.setTimeout(step, 900) }
+      } else if (n < lines[i].length) {
+        n++; setText(lines[i].slice(0, n)); t = window.setTimeout(step, 55 + Math.random() * 70)
+      } else { dir = -1; t = window.setTimeout(step, i === 0 ? 6000 : 4800) }
+    }
+    t = window.setTimeout(step, 5000)
+    return () => window.clearTimeout(t)
+  }, [key, on])  // eslint-disable-line react-hooks/exhaustive-deps
+  return text
+}
+
+function examples(name: string, current: Task | null): string[] {
+  const out = [tr('Ask {name} anything…', { name })]
+  if (current) out.push(tr('Get me ready for “{t}”', { t: current.title.split(' · ')[0] }))
+  out.push(tr('Make me a practice test mixing equations and C pointers'), tr('Explain where my last unit test went wrong'),
+    tr('Give me one hard problem on today’s topic, no hints'), tr('Move tomorrow’s C block to Friday'), tr('Sum up what I learned this week in five lines'))
+  return out
+}
+
+export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false, onPreview, openId }: {
+  ctx: Ctx; current: Task | null; hasKey: boolean; locked: boolean; onClose: () => void
+  /** the Nix page: conversations on the left, the chat in the middle, what the coach made opens on the right */
+  page?: boolean; onPreview?: (href: string) => void; openId?: number
+}) {
   const today = ctx.meta?.today
   const name = ctx.meta?.coach_name || 'Coach'
   const [view, setView] = useState<'chat' | 'list' | 'settings'>('chat')
-  const [cid, setCid] = useState<number | null>(() => storedConvo(today))
-  const [fresh, setFresh] = useState(false)
+  // the Nix page opens on a new chat, like a fresh chat app; the side panel picks up where you left off
+  const [cid, setCid] = useState<number | null>(() => (page ? null : storedConvo(today)))
+  const [fresh, setFresh] = useState(page)
   const [list, setList] = useState<Convo[]>([])
   const [msgs, setMsgs] = useState<ChatMsg[]>([])
   const [text, setText] = useState('')
@@ -505,6 +566,7 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose }: { ctx: Ctx
   const reload = useCallback(() => {
     api.convos().then((x) => {
       setList(x.convos)
+      window.dispatchEvent(new Event(LIST_EV))
       setCid((c) => {
         if (c != null && x.convos.some((k) => k.id === c)) return c
         return fresh ? null : x.default
@@ -567,6 +629,105 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose }: { ctx: Ctx
   // once the stored copy of the message has loaded, stop showing the local one
   const shown = pending && !msgs.some((m) => m.id === userId) ? [...msgs, pending] : msgs
 
+  // a practice test the coach starts opens beside the chat as it is written
+  const seenTests = useRef(new Set<number>())
+  useEffect(() => {
+    if (!page || !onPreview) return
+    for (const x of draft?.tests ?? []) if (!seenTests.current.has(x.id)) { seenTests.current.add(x.id); onPreview(`#/test/${x.id}`) }
+  }, [draft?.tests, page, onPreview])
+  useEffect(() => { if (page && openId != null && openId !== cid) open(openId) }, [page, openId])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!page) return
+    const f = () => { open(null); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('.nix .composer textarea')?.focus()) }
+    window.addEventListener(NEW_EV, f)
+    return () => window.removeEventListener(NEW_EV, f)
+  }, [page, open])
+  useEffect(() => { if (page && !fresh && cid != null && cid !== openId) ctx.go({ kind: 'nix', id: cid }) }, [page, fresh, cid])  // eslint-disable-line react-hooks/exhaustive-deps
+  const [me, setMe] = useState('')
+  useEffect(() => { if (page) api.profile().then((p) => setMe((p.me.name || p.me.system_name || '').trim().split(/\s+/)[0] ?? '')).catch(() => {}) }, [page])
+  // a Khan unit test is a full-screen sheet of its own; everything else opens beside the chat
+  const take = useCallback((href: string) => { if (!onPreview || href.startsWith('#/khan-test/')) return false; onPreview(href); return true }, [onPreview])
+
+  const reduce = useReducedMotion()
+  const hint = useTyping(useMemo(() => examples(name, current), [name, current?.title]), page && !text && !off && !reduce)  // eslint-disable-line react-hooks/exhaustive-deps
+  const pick = (x: Sugg) => {
+    if (x.send) sendText(x.send)
+    else { setText(x.fill ?? ''); requestAnimationFrame(() => { const ta = document.querySelector<HTMLTextAreaElement>('.composer textarea'); ta?.focus(); ta?.setSelectionRange(ta.value.length, ta.value.length) }) }
+  }
+  const composer = (
+    <form className={'composer' + (page ? ' big' : '')} onSubmit={(e) => { e.preventDefault(); if (busy) stop(); else send() }}>
+      {page && !text && !off && <div className="type-hint" aria-hidden="true">{hint}<span className="type-caret" /></div>}
+      <textarea rows={page ? 2 : 1} value={text} autoFocus={page} aria-label={tr('Ask {name}', { name })}
+        placeholder={!hasKey ? tr('Agent is off') : locked ? tr('Test in progress') : page ? '' : tr('Ask {name} anything…', { name })} disabled={off}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }} />
+      {busy
+        ? <button className="btn send" type="submit" aria-label={tr('Stop')} title={tr('Stop')}><Square size={14} strokeWidth={2} /></button>
+        : <button className="btn primary send" type="submit" disabled={off || !text.trim()} aria-label={tr('Send')}><ArrowUp size={16} strokeWidth={1.75} /></button>}
+    </form>
+  )
+  const thread = <>
+    {conv && conv.date !== today && !fresh && <div className="convo-old t3">{tr('From {date}. Messages you send now use today\'s status', { date: fmtDate(conv.date) })}</div>}
+    {shown.map((m) => (
+      <div key={m.id} className={'msg ' + m.role}>
+        {m.role === 'assistant' && <CoachAvatar ctx={ctx} size="sm" />}
+        {m.role === 'assistant' ? <div className="md"><CoachMd text={m.display} ctx={ctx} /></div> : m.display}
+        <div className="msg-foot">
+          <time className="ts" dateTime={m.ts} title={`${fmtDate(m.ts.slice(0, 10))} ${m.ts.slice(11, 16)}`}>{m.ts.slice(11, 16)}</time>
+          {m.id > 0 && !busy && (
+            <span className="msg-act">
+              <CopyBtn text={m.display} />
+              {m === lastAsst && !locked && hasKey && <button className="mini" title={tr('Regenerate reply')} aria-label={tr('Regenerate reply')} onClick={retry}><RotateCcw size={13} strokeWidth={1.5} /></button>}
+              <Confirm label={m.role === 'user' ? tr('Delete message and its reply') : tr('Delete reply')} onYes={() => del(m)} />
+            </span>
+          )}
+        </div>
+      </div>
+    ))}
+    {draft && <DraftView draft={draft} name={name} ctx={ctx} />}
+    <div ref={end} />
+  </>
+  const follow = lastAsst && !busy && !off && (
+    <div className="follow" role="group" aria-label={tr('Follow up')}>
+      {FOLLOW.map((f) => <button key={f.label} className="follow-b" onClick={() => sendText(f.send)}>{tr(f.label)}</button>)}
+    </div>
+  )
+  const empty = shown.length === 0 && !draft
+
+  if (page) {
+    return (
+      <AppLinkCtx.Provider value={take}>
+        <div className="nix">
+          <section className={'nix-main' + (empty && view === 'chat' ? ' is-empty' : '')}>
+            <Topo calm={!(empty && view === 'chat')} />
+            <div className="nix-top">
+              <span className="nix-top-gap" />
+              <span className="nix-title">{view === 'settings' ? tr('Coach settings') : !empty && conv && !fresh ? (conv.title || tr('Untitled')) : ''}</span>
+              <button className={'icon-btn' + (view === 'settings' ? ' on' : '')} onClick={() => setView((v) => (v === 'settings' ? 'chat' : 'settings'))} aria-label={tr('Coach settings')} title={tr('Coach settings')}><Settings2 size={16} strokeWidth={1.5} /></button>
+            </div>
+            {view === 'settings' ? <div className="msgs nix-scroll" ref={scroller}><div className="nix-col"><CoachSettingsView ctx={ctx} /></div></div>
+              : empty ? (
+                <div className="nix-hello">
+                  <NixFly mood={busy ? 'think' : text ? 'look' : 'idle'} />
+                  <h1 className="nix-hi">{me ? tr('{hello}, {name}', { hello: hello(), name: me }) : hello()}<span className="nix-hi-q">{tr('What are we working on?')}</span></h1>
+                  {composer}
+                  {hasKey && !locked
+                    ? <div className="nix-sugg">{suggestions(ctx, current).map((x) => (
+                        <button key={x.label} className="chip" onClick={() => pick(x)}>{x.label}</button>
+                      ))}</div>
+                    : <p className="ch-n">{locked ? tr('A test is in progress: the panel is off until you submit. Ask from the test with the Ask button: rules, formulas and words, not answers.') : tr('The agent is off. Add an AI provider in Settings.')}</p>}
+                </div>
+              ) : <>
+                <div className="msgs nix-scroll" ref={scroller}><div className="nix-col">{thread}</div></div>
+                <div className="nix-col nix-foot">{follow}{composer}<RuleLine current={current} locked={locked} short ctx={ctx} /></div>
+              </>}
+            <Scrollbar key={view + String(cid)} target={scroller} />
+          </section>
+        </div>
+      </AppLinkCtx.Provider>
+    )
+  }
+
   return (
     <aside className="coach" aria-label={tr('Coach')}>
       <div className="coach-head">
@@ -588,7 +749,7 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose }: { ctx: Ctx
 
       {view === 'chat' && <>
         <div className="msgs" ref={scroller}>
-          {shown.length === 0 && !draft && (
+          {empty && (
             <div className="coach-hello">
               <CoachAvatar ctx={ctx} size="big" />
               <h3 className="ch-t">{tr('{hello}. What are we working on?', { hello: hello() })}</h3>
@@ -596,10 +757,7 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose }: { ctx: Ctx
                 <p className="ch-n">{tr('{name} sees your plan, scores, repo files and sticking points. Pick one, or right click anything on the page and choose “Ask {name}”.', { name })}</p>
                 <div className="sugg">
                   {suggestions(ctx, current).map((x) => (
-                    <button key={x.label} className="sugg-b" title={x.fill ? tr('Puts the start in the box for you to finish') : tr('Sends it now')} onClick={() => {
-                      if (x.send) sendText(x.send)
-                      else { setText(x.fill ?? ''); requestAnimationFrame(() => { const ta = document.querySelector<HTMLTextAreaElement>('.coach .composer textarea'); ta?.focus(); ta?.setSelectionRange(ta.value.length, ta.value.length) }) }
-                    }}>
+                    <button key={x.label} className="sugg-b" title={x.fill ? tr('Puts the start in the box for you to finish') : tr('Sends it now')} onClick={() => pick(x)}>
                       <span className="sugg-t">{x.label}</span>{x.fill ? <PenLine size={14} strokeWidth={1.7} className="sugg-go" /> : <ArrowUp size={14} strokeWidth={1.8} className="sugg-go" />}
                     </button>
                   ))}
@@ -607,39 +765,10 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose }: { ctx: Ctx
               </> : <p className="ch-n">{locked ? tr('A test is in progress: the panel is off until you submit. Ask from the test with the Ask button: rules, formulas and words, not answers.') : tr('The agent is off. Add ANTHROPIC_API_KEY to ctu-app/.env and restart the server.')}</p>}
             </div>
           )}
-          {conv && conv.date !== today && !fresh && <div className="convo-old t3">{tr('From {date}. Messages you send now use today\'s status', { date: fmtDate(conv.date) })}</div>}
-          {shown.map((m) => (
-            <div key={m.id} className={'msg ' + m.role}>
-              {m.role === 'assistant' && <CoachAvatar ctx={ctx} size="sm" />}
-              {m.role === 'assistant' ? <div className="md"><CoachMd text={m.display} ctx={ctx} /></div> : m.display}
-              <div className="msg-foot">
-                <time className="ts" dateTime={m.ts} title={`${fmtDate(m.ts.slice(0, 10))} ${m.ts.slice(11, 16)}`}>{m.ts.slice(11, 16)}</time>
-                {m.id > 0 && !busy && (
-                  <span className="msg-act">
-                    <CopyBtn text={m.display} />
-                    {m === lastAsst && !locked && hasKey && <button className="mini" title={tr('Regenerate reply')} aria-label={tr('Regenerate reply')} onClick={retry}><RotateCcw size={13} strokeWidth={1.5} /></button>}
-                    <Confirm label={m.role === 'user' ? tr('Delete message and its reply') : tr('Delete reply')} onYes={() => del(m)} />
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-          {draft && <DraftView draft={draft} name={name} ctx={ctx} />}
-          <div ref={end} />
+          {thread}
         </div>
-        {lastAsst && !busy && !off && (
-          <div className="follow" role="group" aria-label={tr('Follow up')}>
-            {FOLLOW.map((f) => <button key={f.label} className="follow-b" onClick={() => sendText(f.send)}>{tr(f.label)}</button>)}
-          </div>
-        )}
-        <form className="composer" onSubmit={(e) => { e.preventDefault(); if (busy) stop(); else send() }}>
-          <textarea rows={1} value={text} placeholder={!hasKey ? tr('Agent is off') : locked ? tr('Test in progress') : tr('Ask {name} anything…', { name })} disabled={off}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }} />
-          {busy
-            ? <button className="btn send" type="submit" aria-label={tr('Stop')} title={tr('Stop')}><Square size={14} strokeWidth={2} /></button>
-            : <button className="btn primary send" type="submit" disabled={off || !text.trim()} aria-label={tr('Send')}><ArrowUp size={16} strokeWidth={1.75} /></button>}
-        </form>
+        {follow}
+        {composer}
         <RuleLine current={current} locked={locked} short ctx={ctx} />
       </>}
       <Scrollbar key={view + String(cid)} target={scroller} />
