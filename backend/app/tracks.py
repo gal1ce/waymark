@@ -567,7 +567,13 @@ async def llm_plan(d: date, draft: dict, ctx: str) -> tuple[dict, str] | None:
             b = next((b for b, key, _tr in ts if key == blk["key"]), {})
             for t in plan[blk["key"]]:
                 t["meta"] |= _moved(b, tr)
-    return valid(d, plan), out.get("adapt_note", "")
+    plan = valid(d, plan)
+    # a block whose tasks were all dropped keeps the draft: a block is never planned bare
+    for _b, key, _tr in ts:
+        if draft.get(key) and not plan.get(key):
+            log.info("tracks: %s came back empty for %s; keeping the draft", key, d)
+            plan[key] = valid(d, {key: draft[key]})[key] or draft[key]
+    return plan, out.get("adapt_note", "")
 
 
 # ------------------------------------------------------------------ how much is left
