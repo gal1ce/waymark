@@ -1,6 +1,6 @@
 # Waymark
 
-Waymark (the `ctu-app` folder) runs a study plan day by day. It began as the app of the "Real Skill + CTU Plan" and that plan is still built in, but anyone (maths and CS, physics, master's and PhD students) can set up their own: they answer a few questions, the model drafts a plan, the app checks it and they approve it. See [Your own plan](#your-own-plan). Each person installs it on their own computer with their own API key ([INSTALL.md](INSTALL.md), [Giving it to a friend](#giving-it-to-a-friend)).
+Waymark runs a study plan day by day. It began as the app of the "Real Skill + CTU Plan" and that plan is still built in, but anyone (maths and CS, physics, master's and PhD students) can set up their own: they answer a few questions, the model drafts a plan, the app checks it and they approve it. See [Your own plan](#your-own-plan). Each person installs it on their own computer with their own API key ([INSTALL.md](INSTALL.md), [Giving it to a friend](#giving-it-to-a-friend)).
 
 It runs on this machine only: the server binds to `127.0.0.1` and has no login screen. Don't expose the port.
 
