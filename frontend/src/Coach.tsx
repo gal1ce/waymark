@@ -527,6 +527,13 @@ function useTyping(lines: string[], on: boolean): string {
   return text
 }
 
+/** The typed-out example, in a component of its own: its many small updates must not re-render the panel, or React
+ *  writes the box's value back on every frame and eats a character still being composed (ç, ş, dead keys, an IME). */
+function TypeHint({ lines, on }: { lines: string[]; on: boolean }) {
+  const text = useTyping(lines, on)
+  return <div className="type-hint" aria-hidden="true">{text}<span className="type-caret" /></div>
+}
+
 function examples(name: string, current: Task | null): string[] {
   const out = [tr('Ask {name} anything…', { name })]
   if (current) out.push(tr('Get me ready for “{t}”', { t: current.title.split(' · ')[0] }))
@@ -649,14 +656,14 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
   const take = useCallback((href: string) => { if (!onPreview || href.startsWith('#/khan-test/')) return false; onPreview(href); return true }, [onPreview])
 
   const reduce = useReducedMotion()
-  const hint = useTyping(useMemo(() => examples(name, current), [name, current?.title]), page && !text && !off && !reduce)  // eslint-disable-line react-hooks/exhaustive-deps
+  const hints = useMemo(() => examples(name, current), [name, current?.title])  // eslint-disable-line react-hooks/exhaustive-deps
   const pick = (x: Sugg) => {
     if (x.send) sendText(x.send)
     else { setText(x.fill ?? ''); requestAnimationFrame(() => { const ta = document.querySelector<HTMLTextAreaElement>('.composer textarea'); ta?.focus(); ta?.setSelectionRange(ta.value.length, ta.value.length) }) }
   }
   const composer = (
     <form className={'composer' + (page ? ' big' : '')} onSubmit={(e) => { e.preventDefault(); if (busy) stop(); else send() }}>
-      {page && !text && !off && <div className="type-hint" aria-hidden="true">{hint}<span className="type-caret" /></div>}
+      {page && !text && !off && <TypeHint lines={hints} on={!reduce} />}
       <textarea rows={page ? 2 : 1} value={text} autoFocus={page} aria-label={tr('Ask {name}', { name })}
         placeholder={!hasKey ? tr('Agent is off') : locked ? tr('Test in progress') : page ? '' : tr('Ask {name} anything…', { name })} disabled={off}
         onChange={(e) => setText(e.target.value)}
