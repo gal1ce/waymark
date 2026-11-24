@@ -400,6 +400,13 @@ const TR = {
   'yesterday': 'dün', '{n} days ago': '{n} gün önce',
 
   // coach
+  'Make me a practice test mixing equations and C pointers': 'Denklemlerle C işaretçilerini karıştıran bir alıştırma testi hazırla',
+  'Explain where my last unit test went wrong': 'Son ünite testimde nerede yanlış yaptığımı açıkla', 'Give me one hard problem on today’s topic, no hints': 'Bugünkü konudan zor bir soru ver, ipucu olmasın',
+  'Move tomorrow’s C block to Friday': 'Yarınki C bloğunu cumaya taşı', 'Sum up what I learned this week in five lines': 'Bu hafta öğrendiklerimi beş satırda özetle',
+  'Collapse the sidebar': 'Kenar çubuğunu daralt', 'Expand the sidebar': 'Kenar çubuğunu genişlet', 'Recents': 'Son sohbetler', 'Recent conversations': 'Son sohbetler',
+  '{hello}, {name}': '{hello}, {name}', 'What are we working on?': 'Bugün ne üzerinde çalışıyoruz?',
+  'Ask {name}, or tell it what to do…': '{name} cevaplasın ya da ondan bir şey iste…', 'Hide conversations': 'Sohbetleri gizle', 'Show conversations': 'Sohbetleri göster',
+  'The agent is off. Add an AI provider in Settings.': 'Koç kapalı. Ayarlar’dan bir yapay zekâ sağlayıcısı ekle.', 'Open as a full page': 'Tam sayfa aç',
   'Conversations': 'Sohbetler', 'New chat': 'Yeni sohbet', 'Coach settings': 'Koç ayarları', 'Close coach panel': 'Koç panelini kapat', 'Close  ]': 'Kapat  ]',
   'thinking…': 'düşünüyor…', 'Good morning': 'Günaydın', 'Good afternoon': 'İyi günler', 'Good evening': 'İyi akşamlar', 'Up late': 'Geç saate kaldın',
   '{hello}. What are we working on?': '{hello}. Bugün ne üzerinde çalışıyoruz?',

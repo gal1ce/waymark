@@ -3700,3 +3700,209 @@ body.is-sorting, body.is-sorting * { cursor: grabbing !important; user-select: n
 .upd-status { margin: 0; font-size: 13px; color: var(--t2); font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) { .upd-title { font-size: 32px; } .upd-acts .btn.lg { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .sheet.upd *, .sheet.upd { animation: none !important; } }
+
+/* ------------------------------------------------------------------ Nix: the coach's own page */
+.main.main-nix { overflow: hidden; display: flex; flex-direction: column; }
+.main-nix > .nix-page { flex: 1; min-height: 0; }
+.nix-page { display: grid; grid-template-columns: minmax(0, 1fr); height: 100%; min-height: 0; }
+.nix-page.with-pv { grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.15fr); }
+.nix { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; height: 100%; }
+
+.side-recents .convos { gap: 16px; }
+.side-recents .convo-day { padding: 0 10px 6px; font-size: 11px; font-weight: 500; color: var(--t3); }
+.side-recents .convo-open { height: 32px; padding: 0 10px; font-size: 13px; }
+.side-recents .convo-meta { display: none; }
+.side-recents .convo-row { position: relative; padding-right: 0; }
+.side-recents .convo-act { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
+.side-recents .convo-row:hover, .side-recents .convo-row.on { background: var(--s-hover); }
+.side-recents .convo-row:hover .convo-title, .side-recents .convo-row:focus-within .convo-title { padding-right: 52px; }
+.side-recents .convo-row.on .convo-act { opacity: 0; }
+.side-recents .convo-row.on:hover .convo-act, .side-recents .convo-row:focus-within .convo-act { opacity: 1; }
+
+.nix-main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.nix-top { height: 48px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 12px; }
+.nix-title { flex: 1; min-width: 0; text-align: center; font-size: 13px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nix-col { width: 100%; max-width: 760px; margin: 0 auto; }
+.nix-scroll { padding: 8px 24px 24px; }
+.nix-scroll .nix-col { display: flex; flex-direction: column; gap: 20px; }
+.nix-main .msg.assistant .md { font-size: 15px; line-height: 25px; }
+.nix-main .msg.user { align-self: flex-end; max-width: 80%; }
+.nix-foot { padding: 0 24px 12px; display: flex; flex-direction: column; gap: 8px; }
+.nix-foot .composer { padding: 0; }
+
+/* empty: the greeting and the box in the middle of the page, like a fresh chat */
+.nix-hello { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px 24px 12vh; text-align: center; animation: enter var(--d-enter) var(--ease-out); }
+.nix-hi { margin: 0; font: 600 34px/42px var(--serif); color: var(--white); letter-spacing: -0.015em; text-wrap: balance; max-width: 720px; }
+.nix-hi-q { display: block; margin-top: 6px; font: 400 17px/26px var(--sans); color: var(--t2); letter-spacing: 0; }
+.nix-hello .composer { width: 100%; max-width: 720px; padding: 0; margin-top: 6px; }
+.nix-sugg { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 720px; }
+.nix-sugg .chip { height: 34px; padding: 0 14px; font-size: 13px; }
+
+/* the big box: a card with the text on top and the send button in its corner */
+.composer.big { position: relative; display: block; }
+.composer.big textarea { width: 100%; min-height: 108px; max-height: 40vh; resize: none; padding: 16px 60px 16px 18px; border-radius: 20px; font-size: 15px; line-height: 23px; box-shadow: var(--shadow-card); }
+.composer.big textarea:focus { border-color: var(--accent-line); box-shadow: var(--shadow-card), 0 0 0 4px var(--accent-soft); }
+.composer.big .send { position: absolute; right: 12px; bottom: 12px; width: 36px; height: 36px; border-radius: 50%; }
+.nix-foot .composer.big textarea { min-height: 60px; }
+
+.coach-av.nav { width: 22px; height: 22px; font-size: 11px; box-shadow: none; }
+.coach-av.xs { width: 18px; height: 18px; font-size: 10px; box-shadow: none; }
+.coach-av.hero { width: 64px; height: 64px; font-size: 28px; }
+
+/* what the coach made, beside the chat */
+.nix-pv { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--line); background: var(--s-page); animation: enter var(--d-enter) var(--ease-out); }
+.nix-pv-h { height: 48px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 18px; border-bottom: 1px solid var(--line); }
+.nix-pv-t { flex: 1; min-width: 0; font: 600 15px var(--serif); color: var(--white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nix-pv-b { flex: 1; min-height: 0; overflow-y: auto; container: main / inline-size; }
+.nix-pv-b > .page { padding-top: 20px; }
+
+@media (max-width: 1100px) {
+  .nix-page.with-pv { grid-template-columns: minmax(0, 1fr); }
+  .nix-page.with-pv > .nix { display: none; }
+}
+@media (max-width: 760px) {
+  .nix-hi { font-size: 26px; line-height: 32px; }
+  .nixfly { width: 140px; }
+}
+
+/* ------------------------------------------------------------------ the sidebar
+   Desktop: one full-height column that owns the left edge (brand and toggle on the top bar's line, a new chat, the
+   pages, the recent conversations). Wide shows labels; collapsed keeps only the icons, which never move: the width
+   eases, the words fade. Phones keep the bottom tab bar. */
+.nix-top-gap { width: 32px; flex: none; }
+@media (min-width: 861px) {
+  .shell { --rail: 64px; transition: grid-template-columns 280ms var(--ease-out); }
+  .shell.nav-wide { --rail: 252px; }
+  .shell.resizing { transition: none; }
+  .shell { grid-template-areas: "rail top top" "rail center coach"; }
+  .shell.nav-right.coach-right { grid-template-areas: "top top rail" "center coach rail"; }
+  .shell.nav-right.coach-left { grid-template-areas: "top top rail" "coach center rail"; }
+  .shell.nav-left.coach-left { grid-template-areas: "rail top top" "rail coach center"; }
+  .topbar > .wordmark { display: none; }
+  .topbar .crumbs { border-left: 0; padding-left: 4px; }
+
+  .side { justify-content: flex-start; gap: 2px; padding: 0 10px 12px; overflow: hidden; border-right: 1px solid var(--line);
+    background: oklch(from var(--s-deep) l c h / 0.6); }
+  .nav-right .side { border-right: 0; border-left: 1px solid var(--line); }
+  .side-top { position: relative; height: 60px; flex: none; display: flex; align-items: center; margin-bottom: 4px; }
+  .side-brand { padding: 4px 6px; margin-left: 3px; transition: opacity 200ms var(--ease-out); }
+  .side-brand .wm-text { transition: opacity 200ms var(--ease-out); white-space: nowrap; }
+  .side-toggle { position: absolute; right: 0; top: 12px; color: var(--t3); transition: opacity 200ms var(--ease-out), color var(--d-hover) var(--ease-out); }
+  .side-toggle:hover { color: var(--t1); }
+
+  .nav { gap: 2px; }
+  .nav-row { flex-direction: row; justify-content: flex-start; align-items: center; height: 40px; gap: 14px; padding: 0 12px; border-radius: 12px;
+    font-size: 14px; line-height: 20px; font-weight: 400; color: var(--t2); overflow: hidden; }
+  .nav-row svg { flex: none; }
+  .nav-row .coach-av.nav { width: 20px; height: 20px; font-size: 10px; }
+  .nav-row.on { background: var(--s-hover); color: var(--t1); font-weight: 500; }
+  .nav-row.on svg { color: var(--t1); }
+  .nav-row.on::before { display: none; }
+  .nav-label { white-space: nowrap; transition: opacity 200ms var(--ease-out); }
+  .nav-new { color: var(--t1); font-weight: 500; flex: none; margin-bottom: 8px; }
+
+  .side-recents { margin-top: 22px; display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: hidden auto; transition: opacity 200ms var(--ease-out); }
+  .side-recents-h { padding: 0 12px 8px; font-size: 12px; font-weight: 500; color: var(--t3); white-space: nowrap; }
+  .side-recents .convos { min-width: 228px; }
+
+  /* collapsed: icons only; the brand gives way to the toggle when you point at it */
+  .shell:not(.nav-wide) .nav-label, .shell:not(.nav-wide) .side-brand .wm-text { opacity: 0; }
+  .shell:not(.nav-wide) .side-recents { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 120ms var(--ease-out), visibility 0s 120ms; }
+  .shell:not(.nav-wide) .side-toggle { right: auto; left: 6px; opacity: 0; }
+  .shell:not(.nav-wide) .side-top:hover .side-toggle, .shell:not(.nav-wide) .side-toggle:focus-visible { opacity: 1; }
+  .shell:not(.nav-wide) .side-top:hover .side-brand { opacity: 0; }
+}
+@media (max-width: 860px) { .side-top, .nav-new, .side-recents { display: none; } }
+
+/* a page arrives softly: whatever mounts in the main area rises in */
+.main > * { animation: enter var(--d-enter) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { .shell { transition: none; } .main > * { animation: none; } }
+
+/* ------------------------------------------------------------------ Nix: a lifted box, a quiet thread, a living sky */
+:root { --lift: 0 1px 2px oklch(0.35 0.06 255 / 0.08), 0 14px 36px -18px oklch(0.35 0.1 255 / 0.35); --sky-a: 0.55;
+  --sky-1: oklch(0.8 0.11 252); --sky-2: oklch(0.86 0.09 175); --sky-3: oklch(0.9 0.08 80); }
+:root[data-theme="dark"] { --lift: 0 1px 0 oklch(1 0 0 / 0.05) inset, 0 18px 40px -18px oklch(0 0 0 / 0.75); --sky-a: 0.3;
+  --sky-1: oklch(0.42 0.14 268); --sky-2: oklch(0.42 0.09 175); --sky-3: oklch(0.45 0.08 70); }
+
+/* the box: one raised surface (lighter than the page), the text sits in it, the button in its corner; no glow */
+.composer.big { position: relative; display: block; padding: 0; text-align: left; background: var(--s-raised); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--lift);
+  transition: border-color var(--d-hover) var(--ease-out); }
+.composer.big:focus-within { border-color: var(--line-strong); }
+.composer.big textarea, .composer.big textarea:focus, .composer.big textarea:hover:not(:disabled):not(:focus) {
+  display: block; width: 100%; min-height: 104px; max-height: 40vh; padding: 18px 64px 18px 20px; border: 0; border-radius: 24px; background: transparent; box-shadow: none;
+  font-size: 15.5px; line-height: 24px; color: var(--t1); }
+.composer.big .send { position: absolute; right: 12px; bottom: 12px; width: 36px; height: 36px; border-radius: 50%; }
+.nix-foot .composer.big textarea { min-height: 58px; }
+.type-hint { position: absolute; left: 21px; top: 18px; right: 64px; font-size: 15.5px; line-height: 24px; color: var(--t3); pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: clip; }
+.type-caret { display: inline-block; width: 1.5px; height: 18px; margin-left: 1px; vertical-align: -3px; background: var(--t3); animation: blink 1.05s steps(1) infinite; }
+.composer.big:focus-within .type-caret { opacity: 0; }
+
+/* the thread: your words in a quiet bubble, the coach's as a page of prose; actions under the last reply */
+.nix-main .msg.user { background: var(--s-raised); color: var(--t1); border: 1px solid var(--line); border-radius: 20px; padding: 10px 16px; box-shadow: none; font-size: 15px; line-height: 23px; max-width: min(78%, 620px); }
+.nix-main .msg.assistant { display: block; }
+.nix-main .msg.assistant > .coach-av { display: none; }
+.nix-main .msg.assistant .md { font: 400 16.5px/28px var(--serif); color: var(--t1); }
+.nix-main .msg.assistant .md :is(code, pre, .katex) { font-size: 0.92em; }
+.nix-main .msg.assistant .md :is(h1, h2, h3) { font-family: var(--serif); }
+.nix-main .msg-foot .ts { display: none; }
+.nix-main .msg.assistant .msg-foot { margin-top: 10px; }
+.nix-main .msg.assistant:nth-last-child(2) .msg-act { opacity: 1; }
+.nix-main .msg-act .mini { color: var(--t3); }
+.nix-main .msg-act .mini:hover { color: var(--t1); }
+.nix-scroll .nix-col { gap: 28px; }
+
+/* the scenery: a living contour map with a trail, and Nix */
+:root { --topo-line: oklch(0.5 0.07 252 / 0.10); --topo-strong: oklch(0.5 0.07 252 / 0.18); --topo-trail: oklch(0.5 0.14 258 / 0.45); --topo-glow: oklch(0.7 0.16 258 / 0.4);
+  --nix-glow-0: oklch(0.92 0.14 88 / 0.5); --nix-glow-1: oklch(0.9 0.13 80 / 0.14); }
+:root[data-theme="dark"] { --topo-line: oklch(0.85 0.03 250 / 0.07); --topo-strong: oklch(0.85 0.03 250 / 0.13); --topo-trail: oklch(0.78 0.11 262 / 0.5); --topo-glow: oklch(0.75 0.14 262 / 0.35);
+  --nix-glow-0: oklch(0.88 0.16 85 / 0.55); --nix-glow-1: oklch(0.8 0.15 75 / 0.2); }
+.nix-main > :not(.topo) { position: relative; z-index: 1; }
+.topo { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; transition: opacity 700ms var(--ease-out); }
+.nix-main:not(.is-empty) .topo { opacity: 0.55; }
+
+/* Nix, the firefly. The art is in layers (public/nix); every pivot is in the picture's own coordinates (Scenery.tsx). */
+.nixfly { width: 176px; height: auto; aspect-ratio: 1054 / 849; overflow: visible; margin-bottom: -2px; animation: pop 600ms var(--ease-out); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.nixfly g, .nixfly image, .nixfly ellipse, .nixfly circle { transform-box: view-box; }
+.nm-g0 { stop-color: var(--nix-glow-0); }
+.nm-g1 { stop-color: var(--nix-glow-1); }
+.nm-g2 { stop-color: transparent; }
+.nm-b0 { stop-color: oklch(0.98 0.12 95 / 0.95); }
+.nm-b1 { stop-color: oklch(0.92 0.15 85 / 0); }
+/* it hovers: the body bobs, the light breathes with it, the wings beat and the antenna follows a beat late */
+.nm-glow { transform-origin: 626px 760px; animation: nm-glow 3.6s ease-in-out infinite; }
+.nm-bob { animation: nm-bob 3.6s ease-in-out infinite; }
+.nm-lean { transform-origin: 626px 760px; transition: transform 500ms var(--ease-out); }
+.nm-wl { transform-origin: 500px 716px; animation: nm-flap 1.1s ease-in-out infinite; }
+.nm-wr { transform-origin: 752px 716px; animation: nm-flap 1.1s ease-in-out infinite; }
+.nm-ant { transform-origin: 650px 514px; animation: nm-ant 3.6s ease-in-out -0.5s infinite; }
+.nm-bulb { transform-origin: 712px 312px; animation: nm-bulb 2.4s ease-in-out infinite; }
+.nm-face, .nm-blush { transition: transform 260ms var(--ease-out); }
+.nm-blush { fill: oklch(0.86 0.08 35 / 0.85); }
+.nm-eyes, .nm-mouth { fill: #1f213a; }
+.nm-tongue { fill: #4b3552; }
+.nm-glint { fill: #fff; }
+.nm-eye > ellipse:first-child { transform-box: fill-box; transform-origin: center; transition: transform 90ms ease-out; }
+.nm-eyes.shut .nm-eye > ellipse:first-child { transform: scaleY(0.1); }
+.nm-eyes.shut .nm-glint { opacity: 0; }
+.nm-eye-joy path { fill: none; stroke: #1f213a; stroke-width: 22; stroke-linecap: round; }
+.nixfly:hover .nm-wing { animation-duration: 0.7s; }
+/* thinking: wings and light go faster */
+.mood-think .nm-wing { animation-duration: 0.42s; }
+.mood-think .nm-glow, .mood-think .nm-bob { animation-duration: 1.8s; }
+/* clicked: a hop with a squash before it and a little spin at the top */
+.happy .nm-hop { transform-origin: 626px 1010px; animation: nm-hop 900ms var(--ease-out); }
+.happy .nm-wing { animation-duration: 0.28s; }
+@keyframes nm-bob { 0%, 100% { transform: translateY(14px); } 50% { transform: translateY(-14px); } }
+@keyframes nm-glow { 0%, 100% { opacity: 0.7; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.04); } }
+/* a wing beat seen from the front: each wing only narrows toward a point inside the body, never past it, so its root
+   slides under the body and the body's edge stays whole */
+@keyframes nm-flap { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(0.74); } }
+@keyframes nm-ant { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(6deg); } }
+@keyframes nm-bulb { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.55; transform: scale(0.8); } }
+@keyframes nm-hop {
+  0% { transform: none; } 18% { transform: translateY(8px) scale(1.07, 0.9); } 48% { transform: translateY(-110px) scale(0.95, 1.06) rotate(-8deg); }
+  70% { transform: translateY(-20px) rotate(4deg); } 86% { transform: translateY(4px) scale(1.04, 0.96); } 100% { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .nixfly, .nixfly *, .type-caret { animation: none !important; } }
+.coach-av.mascot { background: radial-gradient(circle at 50% 42%, oklch(0.4 0.07 268), oklch(0.24 0.05 270) 75%); }
+.coach-av.mascot img { inset: 6%; width: 88%; height: 88%; border-radius: 0; object-fit: contain; }
