@@ -143,7 +143,8 @@ export function UpdateSection({ onShow }: { onShow: (u: UpdateInfo) => void }) {
       const n = await api.update(true)
       setU(n)
       if (n.available) onShow({ ...n, show: true })
-      else setMsg(n.error ? tx(n.error) : t('You have the latest version.'))
+      else setMsg(n.retry_at ? t('GitHub is limiting requests from this network right now. Try again after {t}.', { t: n.retry_at })
+        : n.error ? tx(n.error) : t('You have the latest version.'))
     } catch (e) { setMsg((e as Error).message) }
   })
   return (

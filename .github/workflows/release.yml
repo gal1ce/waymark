@@ -83,3 +83,9 @@ jobs:
           It opens in your browser. Close the tabs and it stops on its own after 15 minutes. Already have Waymark? It tells you about this version when you open it and updates itself.
           NOTES
           gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Waymark $TAG" --notes-file notes.md
+          # latest.json: what the app's update check reads (backend/app/updates.py), from github.com rather than the
+          # API, whose 60 requests an hour per network run out. The API's shape, cut to the fields the app uses.
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+            | jq '{tag_name, body, html_url, published_at,
+                   assets: [.assets[] | {name, size, browser_download_url, digest}]}' > latest.json
+          gh release upload "$TAG" latest.json --repo "$GITHUB_REPOSITORY"

@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from app import paths, updates
+from app import db, paths, updates
 
 LINUX = [{"name": "waymark-2026.12.1-linux-x86_64"}, {"name": "Waymark-2026.12.1-windows.exe"},
          {"name": "Waymark-2026.12.1-macos-arm64.dmg"}, {"name": "Waymark-2026.12.1-macos-x86_64.dmg"}]
@@ -114,3 +114,60 @@ def test_self_update_refused_where_it_cant_write(packaged):
         assert "can't be written" in updates.self_update_block()
     finally:
         packaged.parent.chmod(0o755)
+
+
+def test_a_failed_check_is_remembered_so_pages_dont_ask_again(packaged):
+    calls = []
+
+    def offline():
+        calls.append(1)
+        raise OSError("no network")
+    assert updates.check(fetch=offline).get("error") and len(calls) == 1
+    assert updates.check(fetch=offline).get("error") and len(calls) == 1       # opening another page: not asked again
+    assert updates.check(force=True, fetch=offline).get("error") and len(calls) == 2   # the button still asks
+    assert updates.check(force=True, fetch=release)["available"]               # and a success clears the failure
+    assert not db.kv_get("update_last_fail")
+
+
+def test_githubs_rate_limit_is_waited_out_even_by_the_button(packaged):
+    from datetime import datetime, timedelta
+    calls = []
+    until = datetime.now() + timedelta(minutes=20)
+
+    def limited():
+        calls.append(1)
+        raise updates.Limited(until)
+    u = updates.check(force=True, fetch=limited)
+    assert u["retry_at"] == until.strftime("%H:%M") and "limiting" in u["error"]
+    u = updates.check(force=True, fetch=limited)
+    assert len(calls) == 1 and u["retry_at"] == until.strftime("%H:%M")
+
+
+def test_latest_json_is_read_first_and_the_api_only_without_it(monkeypatch):
+    import io
+    import urllib.error
+    asked = []
+
+    def fake(req, timeout):
+        asked.append(req.full_url)
+        if req.full_url == updates.FEED_URL:
+            raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, io.BytesIO(b""))
+        if req.full_url == updates.LATEST_URL:
+            raise urllib.error.HTTPError(req.full_url, 403, "rate limit exceeded",
+                                         {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1795712226"}, io.BytesIO(b""))
+        raise AssertionError(req.full_url)
+    monkeypatch.delenv("CTU_UPDATE_FEED", raising=False)
+    monkeypatch.setattr(updates.urllib.request, "urlopen", fake)
+    with pytest.raises(updates.Limited) as e:
+        updates._fetch_latest()
+    assert asked == [updates.FEED_URL, updates.LATEST_URL] and e.value.until.timestamp() == 1795712226
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    asked.clear()
+    monkeypatch.setattr(updates.urllib.request, "urlopen", lambda req, timeout: asked.append(req.full_url) or Resp(b'{"tag_name": "v1"}'))
+    assert updates._fetch_latest() == {"tag_name": "v1"} and asked == [updates.FEED_URL]
