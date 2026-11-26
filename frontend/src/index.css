@@ -3920,3 +3920,7 @@ body.is-sorting, body.is-sorting * { cursor: grabbing !important; user-select: n
 @media (prefers-reduced-motion: reduce) { .nixfly, .nixfly *, .type-caret { animation: none !important; } }
 .coach-av.mascot { background: radial-gradient(circle at 50% 42%, oklch(0.4 0.07 268), oklch(0.24 0.05 270) 75%); }
 .coach-av.mascot img { inset: 6%; width: 88%; height: 88%; border-radius: 0; object-fit: contain; }
+
+/* Settings → Data: the open start-over / delete panel */
+.reset-box { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid var(--neg-line); border-radius: 10px; background: var(--neg-soft); }
+.reset-box .input { flex: 1 1 180px; min-width: 0; }

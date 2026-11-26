@@ -202,3 +202,70 @@ def test_restore_switches_to_the_backups_plan(client, tmp_path):
     r = _restore(client, _zip({backup.DB_ENTRY: _good_db(tmp_path, 9)}))
     assert r.status_code == 200, r.text
     assert profile.key() is None and not profile.ready()
+
+
+# ------------------------------------------------------------------ starting over and deleting the account
+def _set_up(client):
+    """An install in use: a name, a picture, a coach memory, AI settings, a notebook picture and days."""
+    from app import providers
+    client.put("/api/me", json={"name": "Ada"}, headers=H)
+    client.post("/api/me/photo", content=PNG, headers=H | {"content-type": "image/png"})
+    db.ex("INSERT INTO coach_memory (text, created_at, updated_at) VALUES ('Likes proofs.', 'x', 'x')")
+    providers.save_settings(fallback=True)
+    db.kv_set("cursor", {"unit": 3})
+    notes.assets_dir().mkdir(parents=True, exist_ok=True)
+    (notes.assets_dir() / ("a" * 24 + ".png")).write_bytes(PNG)
+    assert db.q1("SELECT COUNT(*) AS n FROM days")["n"] > 0
+
+
+def test_starting_over_keeps_the_account_and_settings_and_drops_the_plan(client):
+    from app import providers
+    _set_up(client)
+    client.put("/api/me/github", json={"github": "off"}, headers=H)
+    assert client.post("/api/account/start-over", json={}, headers=H).status_code == 409   # not confirmed
+    out = client.post("/api/account/start-over", json={"confirm": True}, headers=H).json()
+    me = account.get()
+    assert me["name"] == "Ada" and me["photo"] and me["preset"] == "none" and me["github"] == "off"
+    assert not profile.ready()
+    assert db.q1("SELECT COUNT(*) AS n FROM days")["n"] == 0 and db.kv_get("cursor") is None
+    assert [r["text"] for r in db.q("SELECT text FROM coach_memory")] == ["Likes proofs."]
+    assert providers.settings()["fallback"] is True
+    assert not notes.assets_dir().exists()
+    # the backup file written first holds the plan: restoring it brings the days back
+    kept = Path(out["kept"])
+    assert kept.is_file() and kept.parent == db.backup_dir()
+    with zipfile.ZipFile(kept) as z:
+        assert "notes/" + "a" * 24 + ".png" in z.namelist()
+    backup.restore(kept)
+    assert db.q1("SELECT COUNT(*) AS n FROM days")["n"] > 0
+
+
+def test_deleting_the_account_leaves_a_new_install_and_can_take_the_keys(client, monkeypatch, tmp_path):
+    from app import envfile, providers
+    env = tmp_path / ".env"
+    env.write_text("# mine\nSTUDY=1\nGROQ_API_KEYS=gsk_" + "g" * 40 + "\n")
+    monkeypatch.setenv("CTU_ENV_FILE", str(env))
+    envfile._cache = None
+    _set_up(client)
+    db.backup("by-hand")
+    assert client.post("/api/account/delete", json={"keys": True}, headers=H).status_code == 409
+    out = client.post("/api/account/delete", json={"confirm": True, "keys": True}, headers=H).json()
+    assert out["keys_removed"] == 1
+    me = account.get()
+    assert me["name"] == "" and me["photo"] is None and me["github"] is None and me["preset"] == "none"
+    assert db.q1("SELECT COUNT(*) AS n FROM coach_memory")["n"] == 0 and db.q1("SELECT COUNT(*) AS n FROM days")["n"] == 0
+    assert providers.settings()["fallback"] is False
+    assert not account.photo_dir().exists() and not notes.assets_dir().exists() and not db.backup_dir().exists()
+    assert env.read_text() == "# mine\nSTUDY=1\n" and providers.keys("groq") == []
+    envfile._cache = None
+
+
+def test_deleting_the_account_keeps_the_keys_unless_asked(client, monkeypatch, tmp_path):
+    from app import envfile, providers
+    env = tmp_path / ".env"
+    env.write_text("GROQ_API_KEYS=gsk_" + "g" * 40 + "\n")
+    monkeypatch.setenv("CTU_ENV_FILE", str(env))
+    envfile._cache = None
+    assert client.post("/api/account/delete", json={"confirm": True}, headers=H).json()["keys_removed"] == 0
+    assert len(providers.keys("groq")) == 1
+    envfile._cache = None

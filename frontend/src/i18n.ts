@@ -88,6 +88,21 @@ const TR = {
   'Models': 'Modeller', 'Tests and plans': 'Testler ve planlar', 'Coach chat': 'Koç sohbeti',
   'Pick a model': 'Bir model seç', 'Pick a model: until then {p} is skipped.': 'Bir model seç: o zamana kadar {p} atlanır.',
   'Test the keys': 'Anahtarları dene',
+  'start over': 'baştan başla', 'delete': 'sil', 'Start over…': 'Baştan başla…',
+  'Delete the account': 'Hesabı sil', 'Delete the account…': 'Hesabı sil…', 'Delete everything': 'Her şeyi sil',
+  'Type “{w}” to confirm': 'Onaylamak için “{w}” yaz', 'Also remove the AI keys from .env': 'AI anahtarlarını da .env\'den sil',
+  'Want to keep a copy? Download a backup first.': 'Bir kopyasını saklamak ister misin? Önce bir yedek indir.',
+  'Started over. Your old plan is in the backups folder: {f}': 'Baştan başlandı. Eski planın yedekler klasöründe: {f}',
+  'Removes the plan and everything done under it: days, tasks, tests, scores, notes and the coach\'s conversations. Your name, picture, the coach\'s settings and memory notes, and the AI providers stay. A backup file of everything is saved to the backups folder first, so Restore can bring it back. Then you set up a new plan.':
+    'Planı ve onun altında yapılan her şeyi siler: günler, görevler, testler, puanlar, notlar ve koçla konuşmalar. Adın, resmin, koçun ayarları ve hafıza notları ve AI sağlayıcıları kalır. Önce her şeyin bir yedek dosyası yedekler klasörüne kaydedilir; Geri yükle ile hepsi geri gelir. Sonra yeni bir plan kurarsın.',
+  'Removes everything this app recorded on this computer, the automatic backups included: the app is as on the day it was installed. The app itself, downloaded Khan content and files of yours outside the data folder stay. This can\'t be undone.':
+    'Bu uygulamanın bu bilgisayara kaydettiği her şeyi, otomatik yedekler dahil siler: uygulama kurulduğu günkü haline döner. Uygulamanın kendisi, indirilen Khan içeriği ve veri klasörü dışındaki dosyaların kalır. Bu geri alınamaz.',
+  'Not installed': 'Kurulu değil', 'Test it': 'Dene', 'Switch it on to pick a model.': 'Model seçmek için aç.',
+  'Use my subscription through the {c} program': 'Aboneliğimi {c} programı üzerinden kullan',
+  'Sign in once: run {c} in a terminal and log in with your account. The app runs it in the background with its own tools switched off; API keys in .env are not passed to it.':
+    'Bir kez giriş yap: terminalde {c} komutunu çalıştır ve hesabınla oturum aç. Uygulama onu arka planda, kendi araçları kapalı çalıştırır; .env\'deki API anahtarları ona verilmez.',
+  'The {c} program isn\'t installed on this computer. Install it, sign in once, then switch this on.':
+    '{c} programı bu bilgisayarda kurulu değil. Kur, bir kez giriş yap, sonra bunu aç.',
   'Writes the tests, grades them and drafts plans: pick a strong one.': 'Testleri yazar, puanlar ve planları hazırlar: güçlü bir model seç.',
   'Answers in the chat: a fast, cheap one is fine.': 'Sohbette cevap verir: hızlı ve ucuz bir model yeter.',
   'Back to the default ({m})': 'Varsayılana dön ({m})', 'Add a key to see the models {p} offers.': '{p} modellerini görmek için bir anahtar ekle.',

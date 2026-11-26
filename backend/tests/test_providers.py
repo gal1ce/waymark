@@ -300,3 +300,181 @@ def test_only_the_users_own_model_picks_are_stored(env):
     assert stored["groq"] == {"main": "", "chat": providers.SAME} and "openrouter" not in stored
     providers.save_settings(models={"groq": {"chat": "openai/gpt-oss-20b"}})   # back to the default: nothing stored
     assert "groq" not in db.kv_get("ai_settings")["models"]
+
+
+# ------------------------------------------------------------------ a subscription through Claude Code (app/cli.py)
+FAKE_CLAUDE = r'''#!/usr/bin/env python3
+import json, os, sys
+argv, prompt = sys.argv[1:], sys.stdin.read()
+with open(os.environ["FAKE_LOG"], "a") as f:
+    f.write(json.dumps({"argv": argv, "prompt": prompt, "api_key": os.environ.get("ANTHROPIC_API_KEY")}) + "\n")
+mode = os.environ["FAKE_MODE"]
+def out(o): print(json.dumps(o), flush=True)
+def text(t): out({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": t}}})
+out({"type": "system", "subtype": "init"})
+if mode == "limit":
+    out({"type": "rate_limit_event", "rate_limit_info": {"status": "rejected", "resetsAt": 1795724400}})
+    out({"type": "result", "subtype": "success", "is_error": True, "result": "You've hit your limit"})
+elif mode == "schema":
+    out({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "input_json_delta", "partial_json": "{\"q\": 1}"}}})
+    out({"type": "result", "subtype": "success", "is_error": False, "stop_reason": "tool_use", "structured_output": {"q": 1}})
+else:
+    if "<tool_result" in prompt:
+        text("You did 3 of 4.")
+    else:
+        for piece in ["Let me look. <tool", "_call>{\"name\": \"get_day\", \"input\": {\"date\": \"\"}}</tool_call>"]:
+            text(piece)
+    out({"type": "stream_event", "event": {"type": "message_delta", "delta": {"stop_reason": "end_turn"}}})
+    out({"type": "result", "subtype": "success", "is_error": False, "stop_reason": "end_turn"})
+'''
+
+
+@pytest.fixture
+def fake_claude(env, monkeypatch, tmp_path):
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    exe = bin_ / "claude"
+    exe.write_text(FAKE_CLAUDE)
+    exe.chmod(0o755)
+    log = tmp_path / "calls.jsonl"
+    monkeypatch.setenv("PATH", str(bin_) + os.pathsep + os.environ.get("PATH", ""))
+    monkeypatch.setenv("FAKE_LOG", str(log))
+    monkeypatch.setenv("FAKE_MODE", "chat")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", ANT1)   # .env is loaded into the environment: it must not reach the program
+    return lambda: [__import__("json").loads(x) for x in log.read_text().splitlines()]
+
+
+def test_the_subscription_is_ready_only_when_switched_on_and_installed(fake_claude, monkeypatch):
+    v = {p["id"]: p for p in providers.view()["providers"]}["claude_code"]
+    assert v["installed"] and not v["on"] and not v["ready"] and v["kind"] == "cli"
+    providers.save_settings(cli_on={"claude_code": True})
+    assert providers.ready("claude_code")
+    monkeypatch.setenv("PATH", "/nonexistent")
+    monkeypatch.setattr("pathlib.Path.home", lambda: __import__("pathlib").Path("/nonexistent"))
+    assert not providers.ready("claude_code")
+    with pytest.raises(providers.SetupError):
+        providers.save_settings(cli_on={"groq": True})
+
+
+def test_the_subscription_streams_hides_the_tool_call_markup_and_keeps_the_api_key_out(fake_claude):
+    providers.save_settings(order=["claude_code"], cli_on={"claude_code": True})
+    tools = [{"name": "get_day", "description": "d", "input_schema": {"type": "object", "properties": {}}}]
+
+    async def go(messages):
+        evs = [e async for e in llm.stream(system="coach", messages=messages, tools=tools, role="chat")]
+        return evs, evs[-1][1]
+    msgs = [{"role": "user", "content": "how did I do?"}]
+    evs, resp = asyncio.run(go(msgs))
+    assert "".join(v for k, v in evs if k == "text") == "Let me look. "
+    assert ("tool", "get_day") in evs and resp.stop_reason == "tool_use"
+    use = [b for b in resp.content if b.type == "tool_use"][0]
+    assert use.name == "get_day" and use.input == {"date": ""}
+    msgs += [{"role": "assistant", "content": [b.to_dict() for b in resp.content]},
+             {"role": "user", "content": [{"type": "tool_result", "tool_use_id": use.id, "content": "3/4 done"}]}]
+    evs, resp = asyncio.run(go(msgs))
+    assert llm.text_of(resp) == "You did 3 of 4." and resp.stop_reason == "end_turn"
+    calls = fake_claude()
+    assert all(c["api_key"] is None for c in calls)
+    assert "<tool_result" in calls[1]["prompt"] and "3/4 done" in calls[1]["prompt"]
+    argv = calls[0]["argv"]
+    assert argv[argv.index("--model") + 1] == "haiku" and "get_day" in argv[argv.index("--system-prompt") + 1]
+    assert argv[argv.index("--tools") + 1] == ""
+
+
+def test_a_used_up_plan_moves_on_to_the_next_provider(fake_claude, monkeypatch):
+    monkeypatch.setenv("FAKE_MODE", "limit")
+    providers.add_key("groq", GROQ)
+    providers.save_settings(order=["claude_code", "groq"], cli_on={"claude_code": True}, fallback=True)
+    calls = _fake(monkeypatch, {GROQ: ["from groq"]})
+    resp = asyncio.run(llm.create(system="s", messages=[{"role": "user", "content": "hi"}]))
+    assert llm.text_of(resp) == "from groq" and calls == [GROQ]
+    providers.save_settings(fallback=False)
+    with pytest.raises(llm.Unavailable, match="usage limit is used up; it resets at"):
+        asyncio.run(llm.create(system="s", messages=[{"role": "user", "content": "hi"}]))
+
+
+def test_structured_output_goes_through_the_programs_json_schema(fake_claude, monkeypatch):
+    monkeypatch.setenv("FAKE_MODE", "schema")
+    providers.save_settings(order=["claude_code"], cli_on={"claude_code": True})
+    schema = {"type": "object", "properties": {"q": {"type": "integer"}}}
+    assert asyncio.run(llm.structured("s", "p", schema)) == {"q": 1}
+    argv = fake_claude()[0]["argv"]
+    assert __import__("json").loads(argv[argv.index("--json-schema") + 1]) == schema
+
+
+# ------------------------------------------------------------------ a Google account through the Gemini CLI
+FAKE_GEMINI = r'''#!/usr/bin/env python3
+import json, os, pathlib, sys
+argv, prompt = sys.argv[1:], sys.stdin.read()
+system = pathlib.Path(os.environ["GEMINI_SYSTEM_MD"]).read_text()
+settings = json.loads(pathlib.Path(".gemini/settings.json").read_text())
+with open(os.environ["FAKE_LOG"], "a") as f:
+    f.write(json.dumps({"argv": argv, "prompt": prompt, "system": system, "settings": settings, "cwd": os.getcwd(),
+                        "api_key": os.environ.get("GEMINI_API_KEY")}) + "\n")
+mode = os.environ["FAKE_MODE"]
+def out(o): print(json.dumps(o), flush=True)
+out({"type": "init", "model": "x"})
+if mode == "quota":
+    out({"type": "error", "severity": "error", "message": "RESOURCE_EXHAUSTED: quota exceeded"})
+    out({"type": "result", "status": "error", "error": {"type": "x", "message": "429"}})
+elif mode == "schema":
+    for p in ['```json\n{"q"', ': 1}\n```']:
+        out({"type": "message", "role": "assistant", "content": p, "delta": True})
+    out({"type": "result", "status": "success"})
+else:
+    if "<tool_result" in prompt:
+        out({"type": "message", "role": "assistant", "content": "You did 3 of 4.", "delta": True})
+    else:
+        for p in ["Let me look. <tool_c", 'all>{"name": "get_day", "input": {"date": ""}}</tool_call>']:
+            out({"type": "message", "role": "assistant", "content": p, "delta": True})
+    out({"type": "result", "status": "success"})
+'''
+
+
+@pytest.fixture
+def fake_gemini(env, monkeypatch, tmp_path):
+    bin_ = tmp_path / "gbin"
+    bin_.mkdir()
+    exe = bin_ / "gemini"
+    exe.write_text(FAKE_GEMINI)
+    exe.chmod(0o755)
+    log = tmp_path / "gcalls.jsonl"
+    monkeypatch.setenv("PATH", str(bin_) + os.pathsep + os.environ.get("PATH", ""))
+    monkeypatch.setenv("FAKE_LOG", str(log))
+    monkeypatch.setenv("FAKE_MODE", "chat")
+    monkeypatch.setenv("GEMINI_API_KEY", "AIza" + "k" * 30)
+    providers.save_settings(order=["gemini_cli"], cli_on={"gemini_cli": True})
+    return lambda: [__import__("json").loads(x) for x in log.read_text().splitlines()]
+
+
+def test_the_gemini_cli_runs_in_a_folder_of_its_own_with_its_tools_off(fake_gemini):
+    tools = [{"name": "get_day", "description": "d", "input_schema": {"type": "object", "properties": {}}}]
+
+    async def go(messages):
+        evs = [e async for e in llm.stream(system="coach", messages=messages, tools=tools, role="chat")]
+        return evs, evs[-1][1]
+    msgs = [{"role": "user", "content": "how did I do?"}]
+    evs, resp = asyncio.run(go(msgs))
+    assert "".join(v for k, v in evs if k == "text") == "Let me look. " and resp.stop_reason == "tool_use"
+    use = [b for b in resp.content if b.type == "tool_use"][0]
+    msgs += [{"role": "assistant", "content": [b.to_dict() for b in resp.content]},
+             {"role": "user", "content": [{"type": "tool_result", "tool_use_id": use.id, "content": "3/4 done"}]}]
+    evs, resp = asyncio.run(go(msgs))
+    assert llm.text_of(resp) == "You did 3 of 4."
+    first, second = fake_gemini()
+    assert first["api_key"] is None and first["settings"]["tools"]["core"] == ["none"]
+    assert first["system"].startswith("coach") and "get_day" in first["system"]
+    assert first["argv"][first["argv"].index("-m") + 1] == "flash" and first["cwd"] != second["cwd"]
+    assert not os.path.exists(first["cwd"])   # the run's folder is gone afterwards
+
+
+def test_the_gemini_cli_is_asked_for_json_in_words_and_a_fence_is_stripped(fake_gemini, monkeypatch):
+    monkeypatch.setenv("FAKE_MODE", "schema")
+    assert asyncio.run(llm.structured("s", "p", {"type": "object", "properties": {"q": {"type": "integer"}}})) == {"q": 1}
+    assert "JSON Schema" in fake_gemini()[0]["system"]
+
+
+def test_a_used_up_google_account_is_a_quota_failure(fake_gemini, monkeypatch):
+    monkeypatch.setenv("FAKE_MODE", "quota")
+    with pytest.raises(llm.Unavailable, match="daily Gemini limit"):
+        asyncio.run(llm.create(system="s", messages=[{"role": "user", "content": "hi"}]))

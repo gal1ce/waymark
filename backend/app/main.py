@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
 from . import (account, agent, backup, beej, bus, codecheck, coach, config, db, health, insights, khan, llm, lessons, monitor, notes, notices,
-               onboarding, planlog, planner, practice, profile, providers, seed, state, tests_eod, tracks, updates, xp)
+               onboarding, planlog, planner, practice, profile, providers, reset, seed, state, tests_eod, tracks, updates, xp)
 from .config import (APP_ROOT, COACH_MD, DATA_DIR, DB_PATH, FAKE_CLOCK, KINTSUGI, STUDY_REPO, has_api_key,
                      now, today)
 
@@ -826,6 +826,32 @@ async def backup_restore(request: Request):
     return out
 
 
+class ResetIn(BaseModel):
+    confirm: bool = False   # the page sends it once the user typed the confirming word; without it, refused
+    keys: bool = False      # delete only: take the AI keys out of .env too
+
+
+@app.post("/api/account/start-over")
+def account_start_over(body: ResetIn):
+    """The plan and everything done under it go; the account and the settings stay (app/reset.py). A backup file of
+    the whole install is written to backups/ first."""
+    if not body.confirm:
+        raise state.Refused("Starting over needs confirming.")
+    out = reset.start_over()
+    bus.publish("restored", {})
+    return out
+
+
+@app.post("/api/account/delete")
+def account_delete(body: ResetIn):
+    """Everything this install recorded goes, automatic backups included (app/reset.py)."""
+    if not body.confirm:
+        raise state.Refused("Deleting the account needs confirming.")
+    out = reset.delete_account(body.keys)
+    bus.publish("restored", {})
+    return out
+
+
 # ------------------------------------------------------------------ the plan and onboarding
 @app.get("/api/plan")
 def plan_get():
@@ -916,6 +942,7 @@ class AiIn(BaseModel):
     models: dict[str, dict[str, str]] | None = None
     local_url: str | None = None
     local_on: bool | None = None
+    cli_on: dict[str, bool] | None = None
 
 
 def _active_model() -> str:
@@ -946,7 +973,8 @@ def ai_get():
 
 @app.put("/api/ai")
 def ai_put(body: AiIn):
-    _refuse_setup(lambda: providers.save_settings(body.order, body.fallback, body.models, body.local_url, body.local_on))
+    _refuse_setup(lambda: providers.save_settings(body.order, body.fallback, body.models, body.local_url, body.local_on,
+                                                      body.cli_on))
     llm._clients.clear()
     bus.publish("meta", {})
     return providers.view()

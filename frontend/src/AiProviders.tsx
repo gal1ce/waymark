@@ -198,6 +198,8 @@ function useSortable(ids: string[], onDrop: (order: string[]) => void, onStart: 
 }
 
 function status(p: AiProvider, v: AiView): { text: string; tone: 'ok' | 'warn' | 'off' } {
+  if (p.kind === 'cli') return !p.installed ? { text: t('Not installed'), tone: 'off' } : !p.on ? { text: t('Off'), tone: 'off' }
+    : p.models.main ? { text: t('On'), tone: 'ok' } : { text: `${t('On')} · ${t('no model')}`, tone: 'warn' }
   if (p.id === 'local') return !v.local_on ? { text: t('Off'), tone: 'off' } : p.models.main ? { text: t('On'), tone: 'ok' } : { text: `${t('On')} · ${t('no model')}`, tone: 'warn' }
   if (!p.keys.length) return { text: t('No key'), tone: 'off' }
   const bad = p.keys.filter((k) => k.ok === false).length
@@ -241,7 +243,8 @@ function ProviderBody({ p, view, ctx, setV }: { p: AiProvider; view: AiView; ctx
   const [shaking, shake] = useShake()
   const list = useId()
   const local = p.id === 'local'
-  const canAsk = local ? view.local_on : p.keys.length > 0
+  const sub = p.kind === 'cli'
+  const canAsk = local ? view.local_on : sub ? !!(p.on && p.installed) : p.keys.length > 0
 
   // The list is fetched once, when a picker opens (the server keeps it ten minutes); errors show in the picker.
   const load = (fresh = false) => {
@@ -289,7 +292,17 @@ function ProviderBody({ p, view, ctx, setV }: { p: AiProvider; view: AiView; ctx
         </div>
       )}
 
-      <div className="ai-keys">
+      {sub && (
+        <div className="ai-local">
+          <Switch checked={!!p.on} disabled={busy || !p.installed} onChange={(on) => run(async () => { const r = await ctx.run(api.aiPut({ cli_on: { [p.id]: on } })); if (r) { setV(r); setTests(null) } })}>{t('Use my subscription through the {c} program', { c: p.command })}</Switch>
+          <p className="field-h">{p.installed
+            ? t('Sign in once: run {c} in a terminal and log in with your account. The app runs it in the background with its own tools switched off; API keys in .env are not passed to it.', { c: p.command })
+            : t('The {c} program isn\'t installed on this computer. Install it, sign in once, then switch this on.', { c: p.command })}</p>
+          {tests?.[0] && <p className={'ai-key-st ' + (tests[0].ok ? 'ok' : 'bad')}>{tests[0].ok ? <><Check size={13} strokeWidth={2} />{t('Works')}</> : <><CircleAlert size={13} strokeWidth={1.8} />{tests[0].reason}</>}</p>}
+        </div>
+      )}
+
+      {!sub && <div className="ai-keys">
         <div className="ai-sub">{t('Keys')} <span className="t3 mono">{p.env}</span></div>
         {p.keys.length ? (
           <ol>
@@ -319,7 +332,7 @@ function ProviderBody({ p, view, ctx, setV }: { p: AiProvider; view: AiView; ctx
           <button type="submit" className="btn primary sm" {...busyProps(busy)}><KeyRound size={14} strokeWidth={1.6} /><span>{t('Check and add')}</span></button>
         </form>
         <p className="field-h">{t('The key is checked with {p} first, then added to the end of its line in .env.', { p: p.label })}</p>
-      </div>
+      </div>}
 
       <div className="ai-models">
         <div className="ai-sub">{t('Models')}</div>
@@ -340,11 +353,11 @@ function ProviderBody({ p, view, ctx, setV }: { p: AiProvider; view: AiView; ctx
             : <span className="mono small t2">{p.models.chat || t('Same as tests and plans')}</span>}
           <span className="field-h">{t('Answers in the chat: a fast, cheap one is fine.')}</span>
         </div>
-        {!canAsk && <p className="field-h">{local ? t('Switch the local model on to see the models it has.') : t('Add a key to see the models {p} offers.', { p: p.label })}</p>}
+        {!canAsk && <p className="field-h">{local ? t('Switch the local model on to see the models it has.') : sub ? t('Switch it on to pick a model.') : t('Add a key to see the models {p} offers.', { p: p.label })}</p>}
         {!p.models.main && <p className="ai-warn"><CircleAlert size={13} strokeWidth={1.8} />{t('Pick a model: until then {p} is skipped.', { p: p.label })}</p>}
         <div className="inline-form">
           <button type="button" className="btn ghost sm ai-test" {...busyProps(busy)} disabled={busy || !canAsk || !p.models.main} onClick={test}>
-            <Plug size={14} strokeWidth={1.6} /><span>{t('Test the keys')}</span></button>
+            <Plug size={14} strokeWidth={1.6} /><span>{sub ? t('Test it') : t('Test the keys')}</span></button>
         </div>
       </div>
     </div>

@@ -179,10 +179,13 @@ export type AiKey = { index: number; hint: string; ok: boolean | null; reason: s
 export type AiProvider = {
   id: string; label: string; note: string; keys_url: string; needs_key: boolean; env: string; ready: boolean; primary: boolean
   keys: AiKey[]; models: { main: string; chat: string }; default_models: { main: string; chat: string }; base: string
+  /** 'cli': a subscription reached through the vendor's program (command); on/installed are null for the others */
+  kind: 'anthropic' | 'openai' | 'cli'; command: string; on: boolean | null; installed: boolean | null
 }
 export type AiModel = { id: string; name: string; context: number; free: boolean; price: string; chat: boolean; created: number }
 export type AiView = { providers: AiProvider[]; fallback: boolean; local_url: string; local_on: boolean; primary: string | null; env_file: string }
-export type AiPut = { order?: string[]; fallback?: boolean; models?: Record<string, Partial<{ main: string; chat: string }>>; local_url?: string; local_on?: boolean }
+export type AiPut = { order?: string[]; fallback?: boolean; models?: Record<string, Partial<{ main: string; chat: string }>>; local_url?: string; local_on?: boolean
+  cli_on?: Record<string, boolean> }
 
 // Khan content (Kolibri): unit outline, videos, exercises in Perseus format, the in-app unit test
 export type KhanProgress = { m: number; n: number; last: number[]; mastered: boolean; mastered_at?: string | null }
@@ -437,6 +440,10 @@ export const api = {
     if (!r.ok) throw new ApiError((data as { error?: string }).error ?? `HTTP ${r.status}`)
     return data as { created: string | null; kept: string }
   },
+  /** The plan and everything done under it go; the account and settings stay. A backup file is written first. */
+  startOver: () => req<{ kept: string }>('POST', '/account/start-over', { confirm: true }),
+  /** Everything this install recorded goes (keys: the AI keys in .env too). */
+  deleteAccount: (keys: boolean) => req<{ keys_removed: number }>('POST', '/account/delete', { confirm: true, keys }),
   khanSubmitTest: (id: number, answers: Record<string, PAnswers>) => req<{ test: KhanTest; passed: boolean; message: string }>('POST', `/khan/tests/${id}/submit`, { answers }),
 }
 
