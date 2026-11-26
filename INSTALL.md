@@ -2,7 +2,7 @@
 
 A study app for university-level learners: you describe what you study and when, the model drafts a plan (tracks of units, a weekly schedule, pass marks), you approve it, and the app runs your days: tasks with their sources, a timer, closed-book unit checks, an end-of-day test and a coach that helps without solving your work for you.
 
-Everything stays on your computer. You bring your own AI provider: Gemini, Groq or OpenRouter (free tiers), Anthropic or OpenAI (paid), or a model on your own computer.
+Everything stays on your computer. You bring your own AI provider: Gemini, Groq or OpenRouter (free tiers), Anthropic or OpenAI (paid), a model on your own computer, or a subscription you already have: Claude Pro or Max through Claude Code, a Google account through the Gemini CLI.
 
 ## Download (easiest)
 

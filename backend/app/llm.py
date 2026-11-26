@@ -15,7 +15,7 @@ from typing import Any, AsyncIterator
 
 import anthropic
 
-from . import oai, providers
+from . import cli, oai, providers
 from .oai import CallError
 from .providers import PROVIDERS
 
@@ -202,7 +202,7 @@ async def create(*, system: Any, messages: list, tools: list | None = None, effo
             i += 1
             continue
         call = _anthropic_create if PROVIDERS[pid].kind == "anthropic" else (
-            lambda k, m, **kw: oai.create(pid, k, m, **kw))
+            lambda k, m, **kw: (cli if PROVIDERS[pid].kind == "cli" else oai).create(pid, k, m, **kw))
         try:
             resp = await call(key, model, system=system, messages=messages, tools=tools, effort=effort,
                               max_tokens=max_tokens, schema=schema)
@@ -252,7 +252,7 @@ async def stream(*, system: Any, messages: list, tools: list | None = None, effo
         gen = (_anthropic_stream(key, mdl, system=system, messages=messages, tools=tools, effort=effort,
                                  max_tokens=max_tokens, schema=schema)
                if PROVIDERS[pid].kind == "anthropic" else
-               oai.stream(pid, key, mdl, system=system, messages=messages, tools=tools, effort=effort,
+               (cli if PROVIDERS[pid].kind == "cli" else oai).stream(pid, key, mdl, system=system, messages=messages, tools=tools, effort=effort,
                           max_tokens=max_tokens, schema=schema))
         emitted, resp = False, None
         try:
@@ -373,7 +373,7 @@ async def ask_one(pid: str, key: str, model: str) -> str:
     if PROVIDERS[pid].kind == "anthropic":
         resp = await _anthropic_create(key, model, **kw)
     else:
-        resp = await oai.create(pid, key, model, **kw)
+        resp = await (cli if PROVIDERS[pid].kind == "cli" else oai).create(pid, key, model, **kw)
     return text_of(resp)
 
 
@@ -386,6 +386,8 @@ async def catalog(pid: str, key: str | None = None, fresh: bool = False) -> list
     if key is None:
         ks = providers.keys(pid)
         key = ks[0] if ks else ""
+    if PROVIDERS[pid].kind == "cli":
+        return cli.catalog(pid)
     if PROVIDERS[pid].needs_key and not key:
         raise providers.SetupError(f"Add a {PROVIDERS[pid].label} key first.")
     slot = (pid, providers.base(pid))
@@ -409,6 +411,8 @@ async def list_models(pid: str, key: str | None = None) -> list[str]:
     if key is None:
         ks = providers.keys(pid)
         key = ks[0] if ks else ""
+    if PROVIDERS[pid].kind == "cli":
+        return [c["id"] for c in cli.catalog(pid)]
     if PROVIDERS[pid].needs_key and not key:
         raise providers.SetupError(f"Add a {PROVIDERS[pid].label} key first.")
     if PROVIDERS[pid].kind == "anthropic":

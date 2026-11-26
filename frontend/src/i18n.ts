@@ -88,6 +88,12 @@ const TR = {
   'Models': 'Modeller', 'Tests and plans': 'Testler ve planlar', 'Coach chat': 'Koç sohbeti',
   'Pick a model': 'Bir model seç', 'Pick a model: until then {p} is skipped.': 'Bir model seç: o zamana kadar {p} atlanır.',
   'Test the keys': 'Anahtarları dene',
+  'Not installed': 'Kurulu değil', 'Test it': 'Dene', 'Switch it on to pick a model.': 'Model seçmek için aç.',
+  'Use my subscription through the {c} program': 'Aboneliğimi {c} programı üzerinden kullan',
+  'Sign in once: run {c} in a terminal and log in with your account. The app runs it in the background with its own tools switched off; API keys in .env are not passed to it.':
+    'Bir kez giriş yap: terminalde {c} komutunu çalıştır ve hesabınla oturum aç. Uygulama onu arka planda, kendi araçları kapalı çalıştırır; .env\'deki API anahtarları ona verilmez.',
+  'The {c} program isn\'t installed on this computer. Install it, sign in once, then switch this on.':
+    '{c} programı bu bilgisayarda kurulu değil. Kur, bir kez giriş yap, sonra bunu aç.',
   'Writes the tests, grades them and drafts plans: pick a strong one.': 'Testleri yazar, puanlar ve planları hazırlar: güçlü bir model seç.',
   'Answers in the chat: a fast, cheap one is fine.': 'Sohbette cevap verir: hızlı ve ucuz bir model yeter.',
   'Back to the default ({m})': 'Varsayılana dön ({m})', 'Add a key to see the models {p} offers.': '{p} modellerini görmek için bir anahtar ekle.',

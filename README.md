@@ -43,6 +43,8 @@ Waymark opens in your browser. Starting it again while it runs opens another tab
    | Gemini, Groq, OpenRouter | free tiers (with limits) |
    | Anthropic (Claude), OpenAI | paid |
    | A model on your own computer (Ollama, LM Studio, llama.cpp) | free, nothing leaves your computer |
+   | Your Claude Pro or Max plan, through Claude Code signed in on this computer | the plan you already pay for (its usage limits) |
+   | Your Google account (and Google AI Pro, if you have it), through the Gemini CLI signed in on this computer | free daily limits, higher with the plan |
 
    You can add more than one provider and set the order they are tried in.
 2. **Answer the questions.** Choose the quick start (a few questions) or the full set.
