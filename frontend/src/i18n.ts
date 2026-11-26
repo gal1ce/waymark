@@ -45,6 +45,8 @@ const TR = {
     'Waymark disk görüntüsünün içinden çalışıyor. Önce Uygulamalar\'a sürükle, sonra oradan başlat.',
   'There is no file for this system in that release.': 'O sürümde bu sistem için dosya yok.',
   "Couldn't reach GitHub to check for updates.": 'Güncellemeleri denetlemek için GitHub\'a ulaşılamadı.',
+  'GitHub is limiting requests from this network right now.': 'GitHub şu an bu ağdan gelen istekleri sınırlıyor.',
+  'GitHub is limiting requests from this network right now. Try again after {t}.': 'GitHub şu an bu ağdan gelen istekleri sınırlıyor. {t} sonrasında tekrar dene.',
 
   // Beej reader
   "Beej's Guide to C": "Beej's Guide to C", 'In this chapter': 'Bu bölümde', 'Next chapter': 'Sonraki bölüm',

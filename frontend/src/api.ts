@@ -287,6 +287,8 @@ export class ApiError extends Error {}
 export type UpdateJob = { phase: 'idle' | 'downloading' | 'installing' | 'restarting' | 'failed'; done?: number; total?: number; error?: string | null; version?: string }
 export type UpdateInfo = {
   current: string; packaged: boolean; enabled: boolean; available: boolean; show: boolean; checked?: string; error?: string
+  /** set when GitHub's rate limit stopped the check: when it lifts, HH:MM */
+  retry_at?: string
   latest: { version: string; notes: string; page: string; published: string } | null
   asset?: { name: string; size: number; url: string } | null; self_update?: boolean; reason?: string | null; job: UpdateJob
 }

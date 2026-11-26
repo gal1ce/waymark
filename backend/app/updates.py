@@ -1,7 +1,11 @@
 """Updates for the packaged program (Waymark.exe, Waymark.app, the Linux binary).
 
 When the app is opened, the page asks here whether GitHub has a newer release (once every few hours at most; only a
-plain request for the latest release goes out, nothing about the user). If there is one, the page shows the update
+plain request for the latest release goes out, nothing about the user). It reads latest.json, a file the release
+workflow puts on every release, from github.com: GitHub's API allows only 60 requests an hour per network without an
+account, shared with everything else on that network, so the API is asked only for a release without that file. A
+failed check is remembered, so opening pages doesn't ask again and again: a rate limit until GitHub says it ends,
+anything else for RETRY_AFTER_FAIL (unless the user presses Check for updates). If there is one, the page shows the update
 screen: update now, download it yourself, or not now. "Update now" downloads the file for this system, checks its
 size and SHA-256 against what GitHub lists, swaps it in for the running program and starts the new one, which waits
 for this one to stop and takes over the same port; the open tab reloads into it. The data folder is never touched.
@@ -31,6 +35,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -40,9 +45,11 @@ from typing import Any
 from . import db, paths
 
 REPO = "gal1ce/waymark"
+FEED_URL = f"https://github.com/{REPO}/releases/latest/download/latest.json"
 LATEST_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 PAGE_URL = f"https://github.com/{REPO}/releases/latest"
 CHECK_EVERY = timedelta(hours=6)
+RETRY_AFTER_FAIL = timedelta(minutes=30)
 USER_AGENT = "Waymark-update-check"
 
 log = logging.getLogger("ctu.updates")
@@ -143,10 +150,43 @@ def later(version: str) -> None:
 
 
 # ------------------------------------------------------------------ checking
-def _fetch_latest() -> dict:
-    req = urllib.request.Request(os.environ.get("CTU_UPDATE_FEED") or LATEST_URL, headers={"Accept": "application/vnd.github+json", "User-Agent": USER_AGENT})
+def _failed(out: dict, limited_until: datetime | None) -> None:
+    if limited_until:
+        out["error"] = "GitHub is limiting requests from this network right now."
+        out["retry_at"] = limited_until.strftime("%H:%M")
+    else:
+        out["error"] = "Couldn't reach GitHub to check for updates."
+class Limited(RuntimeError):
+    """GitHub's API turned the request away for this network's hourly limit; `until` is when it lifts."""
+
+    def __init__(self, until: datetime):
+        self.until = until
+        super().__init__(f"rate limited until {until:%H:%M}")
+
+
+def _get(url: str) -> dict:
+    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=8) as r:
         return json.loads(r.read())
+
+
+def _fetch_latest() -> dict:
+    """The latest release in the API's shape: latest.json from github.com, else (a release without it) the API."""
+    if os.environ.get("CTU_UPDATE_FEED"):
+        return _get(os.environ["CTU_UPDATE_FEED"])
+    try:
+        return _get(FEED_URL)
+    except urllib.error.HTTPError as e:   # 404: the latest release has no latest.json; the API knows it anyway
+        log.info("latest.json unavailable (%s); asking the API", e.code)
+    try:
+        return _get(LATEST_URL)
+    except urllib.error.HTTPError as e:
+        if e.code == 429 or e.code == 403 and (e.headers.get("x-ratelimit-remaining") == "0"
+                                               or "rate limit" in str(e.reason).lower()):
+            reset = e.headers.get("x-ratelimit-reset")
+            raise Limited(datetime.fromtimestamp(int(reset)) if reset and reset.isdigit()
+                          else datetime.now() + timedelta(hours=1)) from None
+        raise
 
 
 def _release(raw: dict) -> dict:
@@ -171,14 +211,26 @@ def check(force: bool = False, fetch: Callable[[], dict] = _fetch_latest) -> dic
     rel = cached.get("release")
     fresh = cached.get("ts") and datetime.fromisoformat(cached["ts"]) > datetime.now() - CHECK_EVERY
     if force or not fresh or not rel:
-        try:
-            rel = _release(fetch())
-            db.kv_set("update_last_check", {"ts": datetime.now().isoformat(timespec="seconds"), "release": rel})
-        except Exception as e:  # noqa: BLE001 (offline, GitHub down, no release yet: the app goes on)
-            log.info("update check failed: %r", e)
-            out["error"] = "Couldn't reach GitHub to check for updates."
+        failed = db.kv_get("update_last_fail") or {}
+        until = datetime.fromisoformat(failed["until"]) if failed.get("until") else None
+        # a rate limit holds even for the button (asking again only uses up the next hour); anything else, not
+        if until and until > datetime.now() and (failed.get("limited") or not force):
+            _failed(out, until if failed.get("limited") else None)
             if not rel:
                 return out
+        else:
+            try:
+                rel = _release(fetch())
+                db.kv_set("update_last_check", {"ts": datetime.now().isoformat(timespec="seconds"), "release": rel})
+                db.kv_set("update_last_fail", {})
+            except Exception as e:  # noqa: BLE001 (offline, GitHub down, no release yet: the app goes on)
+                log.info("update check failed: %r", e)
+                limited = isinstance(e, Limited)
+                until = e.until if limited else datetime.now() + RETRY_AFTER_FAIL
+                db.kv_set("update_last_fail", {"until": until.isoformat(timespec="seconds"), "limited": limited})
+                _failed(out, until if limited else None)
+                if not rel:
+                    return out
     out["checked"] = (db.kv_get("update_last_check") or {}).get("ts")
     if not newer(rel["version"], have):
         return out
