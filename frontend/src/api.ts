@@ -440,6 +440,10 @@ export const api = {
     if (!r.ok) throw new ApiError((data as { error?: string }).error ?? `HTTP ${r.status}`)
     return data as { created: string | null; kept: string }
   },
+  /** The plan and everything done under it go; the account and settings stay. A backup file is written first. */
+  startOver: () => req<{ kept: string }>('POST', '/account/start-over', { confirm: true }),
+  /** Everything this install recorded goes (keys: the AI keys in .env too). */
+  deleteAccount: (keys: boolean) => req<{ keys_removed: number }>('POST', '/account/delete', { confirm: true, keys }),
   khanSubmitTest: (id: number, answers: Record<string, PAnswers>) => req<{ test: KhanTest; passed: boolean; message: string }>('POST', `/khan/tests/${id}/submit`, { answers }),
 }
 

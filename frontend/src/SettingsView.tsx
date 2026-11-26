@@ -1,5 +1,5 @@
-import { useEffect, type ReactNode } from 'react'
-import { ArchiveRestore, Download, FileText, HardDrive, KeyRound, Keyboard, ListChecks, MessageSquareText, Monitor, Moon, Palette, PencilLine, RefreshCw, Stethoscope, Sun } from 'lucide-react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
+import { ArchiveRestore, Download, RotateCcw, Trash2, FileText, HardDrive, KeyRound, Keyboard, ListChecks, MessageSquareText, Monitor, Moon, Palette, PencilLine, RefreshCw, Stethoscope, Sun } from 'lucide-react'
 import type { Ctx } from './App'
 import { ACCENTS, DEFAULT_ACCENT, useAccent, type Side, type ThemePref } from './prefs'
 import { CoachSettingsView } from './Coach'
@@ -9,7 +9,7 @@ import { api } from './api'
 import { busyProps, useBusy } from './interact'
 import { useLoad } from './ui'
 import { ExamDates, KeyCard } from './Setup'
-import { ColorField } from './controls'
+import { ColorField, Switch } from './controls'
 import { UpdateSection } from './Update'
 
 const THEMES: { k: ThemePref; label: Key; note: Key; icon: ReactNode }[] = [
@@ -186,6 +186,67 @@ function DataSection({ ctx }: { ctx: Ctx }) {
       <div className="inline-form">
         <button type="button" className="btn ghost sm" {...busyProps(busy)} onClick={restore}><ArchiveRestore size={14} strokeWidth={1.6} /><span>{t('Restore from a backup…')}</span></button>
       </div>
+      <ResetPanel ctx={ctx} kind="start" download={download} busy={busy} />
+      <ResetPanel ctx={ctx} kind="delete" download={download} busy={busy} />
+    </>
+  )
+}
+
+/** Starting over (the plan goes, the account stays) or deleting the account (everything goes). Each opens a panel that
+    says what goes and what stays, and acts only once the confirming word is typed. */
+function ResetPanel({ ctx, kind, download, busy: outerBusy }: { ctx: Ctx; kind: 'start' | 'delete'; download: () => void; busy: boolean }) {
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState('')
+  const [keys, setKeys] = useState(false)
+  const [busy, run] = useBusy()
+  const id = useId()
+  const start = kind === 'start'
+  const word = start ? t('start over') : t('delete')
+  const ok = typed.trim().toLocaleLowerCase() === word.toLocaleLowerCase()
+  const go = () => run(async () => {
+    if (start) {
+      const r = await ctx.run(api.startOver())
+      if (!r) return
+      ctx.notify(t('Started over. Your old plan is in the backups folder: {f}', { f: r.kept.split(/[\\/]/).pop() ?? '' }), 'ok')
+      setOpen(false); setTyped('')
+      location.hash = '#/'
+      ctx.refresh()
+    } else {
+      const r = await ctx.run(api.deleteAccount(keys))
+      if (!r) return
+      // what this browser kept for the app (notes beside videos, folded panels…) goes too; the language stays
+      try { for (const k of Object.keys(localStorage)) if (k.startsWith('ctu.') && k !== 'ctu.lang') localStorage.removeItem(k) } catch { /* private window */ }
+      location.hash = '#/'
+      location.reload()
+    }
+  })
+  return (
+    <>
+      <h3 className="set-sub">{start ? t('Start over') : t('Delete the account')}</h3>
+      <p className="set-note">{start
+        ? t('Removes the plan and everything done under it: days, tasks, tests, scores, notes and the coach\'s conversations. Your name, picture, the coach\'s settings and memory notes, and the AI providers stay. A backup file of everything is saved to the backups folder first, so Restore can bring it back. Then you set up a new plan.')
+        : t('Removes everything this app recorded on this computer, the automatic backups included: the app is as on the day it was installed. The app itself, downloaded Khan content and files of yours outside the data folder stay. This can\'t be undone.')}</p>
+      {!open
+        ? <div className="inline-form"><button type="button" className="btn danger sm" disabled={outerBusy} onClick={() => setOpen(true)}>
+            {start ? <RotateCcw size={14} strokeWidth={1.6} /> : <Trash2 size={14} strokeWidth={1.6} />}<span>{start ? t('Start over…') : t('Delete the account…')}</span></button></div>
+        : (
+          <form className="reset-box" onSubmit={(e) => { e.preventDefault(); if (ok) go() }}>
+            {!start && (
+              <>
+                <p className="field-h">{t('Want to keep a copy? Download a backup first.')}{' '}
+                  <button type="button" className="linkish" disabled={outerBusy} onClick={download}>{t('Download a backup')}</button></p>
+                <Switch checked={keys} disabled={busy} onChange={setKeys}>{t('Also remove the AI keys from .env')}</Switch>
+              </>
+            )}
+            <label className="field-l" htmlFor={id}>{t('Type “{w}” to confirm', { w: word })}</label>
+            <div className="inline-form">
+              <input id={id} className="input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} autoFocus placeholder={word} />
+              <button type="submit" className="btn danger sm" {...busyProps(busy)} disabled={busy || !ok}>
+                {start ? <RotateCcw size={14} strokeWidth={1.6} /> : <Trash2 size={14} strokeWidth={1.6} />}<span>{start ? t('Start over') : t('Delete everything')}</span></button>
+              <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { setOpen(false); setTyped(''); setKeys(false) }}><span>{t('Cancel')}</span></button>
+            </div>
+          </form>
+        )}
     </>
   )
 }
