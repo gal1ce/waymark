@@ -1148,6 +1148,16 @@ const TR = {
   "Not needed today: you passed the unit test ({n}%). The lessons stay here if you want to review.": "Bugün gerek yok: unit test'i geçtin (%{n}). Tekrar etmek istersen dersler burada duruyor.",
   "Question for {name}": "{name} için soru",
   "Ask": "Sor",
+  // what the coach did on the way (Coach.tsx Steps); the labels come from the server (agent.tool_label)
+  'running': 'sürüyor', 'failed': 'başarısız', '{n} steps': '{n} adım', 'one failed': 'biri başarısız',
+  'Suggested replies': 'Önerilen yanıtlar', 'Click to send': 'Göndermek için tıkla', 'Click to send · Tab puts it in the box': 'Göndermek için tıkla · Tab kutuya yazar',
+  'Looking at your day': 'Gününe bakıyor', 'Reading your recent days': 'Son günlerini okuyor', 'Reading a file': 'Dosya okuyor',
+  'Browsing files': 'Dosyalara bakıyor', 'Logging a sticking point': 'Takıldığın noktayı kaydediyor', 'Closing a sticking point': 'Takıldığın noktayı kapatıyor',
+  'Adding a day note': 'Gün notu ekliyor', 'Writing to the coach log': 'Koç günlüğüne yazıyor', 'Re-planning a future day': 'İleriki bir günü yeniden planlıyor',
+  'Saving a memory note': 'Hafıza notu kaydediyor', 'Creating a practice test': 'Alıştırma testi hazırlıyor',
+  'Reading COACH.md': 'COACH.md\'yi okuyor', 'Reading the plan': 'Planı okuyor',
+  'Looking at {d}': '{d} gününe bakıyor', 'Reading the last {n} days': 'Son {n} günü okuyor', 'Re-planning {d}': '{d} gününü yeniden planlıyor',
+  'Writing practice test {n}': 'Alıştırma testi {n} yazılıyor', 'Reading {f}': '{f} okunuyor', 'Browsing {f}': '{f} klasörüne bakıyor',
   "Streak {n} days, {x} XP": "{n} günlük seri, {x} XP",
 } as const
 

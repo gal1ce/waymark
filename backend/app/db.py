@@ -396,8 +396,14 @@ def _m14_skip_passed_study(c: sqlite3.Connection) -> None:
                       (ts(), json.dumps(m, ensure_ascii=False), sid))
 
 
+def _m15_chat_meta(c: sqlite3.Connection) -> None:
+    """A coach reply keeps what it did on the way (its tool steps) and the replies it suggested next."""
+    if "meta" not in {r[1] for r in c.execute("PRAGMA table_info(chat)")}:
+        c.execute("ALTER TABLE chat ADD COLUMN meta TEXT NOT NULL DEFAULT ''")
+
+
 MIGRATIONS = [_m1_convos, _m2_test_cancel, _m3_test_pause, _m4_seed_refresh, _m5_indexes, _m6_khan, _m7_khan_texts, _m8_notes, _m9_notices, _m10_profile,
-              _m11_plan, _m12_note_topic, _m13_english_seed, _m14_skip_passed_study]
+              _m11_plan, _m12_note_topic, _m13_english_seed, _m14_skip_passed_study, _m15_chat_meta]
 
 
 def _migrate(c: sqlite3.Connection) -> None:

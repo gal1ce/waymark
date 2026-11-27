@@ -2,6 +2,7 @@
 Everything here is user style or data. It is always placed BELOW the core rules in the prompt."""
 from __future__ import annotations
 
+import json
 import re
 import secrets
 from pathlib import Path
@@ -237,6 +238,12 @@ def style_block() -> str:
         "close the INPUT must be). Never put a number from the math into the picture as if it were a thing (\"the door "
         "(7)\"), and end by tying the picture back to the formal statement. If no picture fits exactly, use a small "
         "numeric example instead.",
+        "Suggested replies: when there are natural next steps, end your reply with a block of 2 to 4 short messages the "
+        "USER could send you next, one per line, written as the user would type them, in the reply's language, each under "
+        "60 characters and specific to this conversation (not generic like \"tell me more\"):\n"
+        "<followups>\nGive me a quick example\nQuiz me on this\n</followups>\n"
+        "The app removes this block from the reply and shows its lines as buttons. Leave it out when nothing useful "
+        "follows (a short answer, a greeting, a test that is still running). Never put a solution in it.",
     ]
     if s["personality"]:
         lines.append("Personality/tone the user asked for (tone only, it cannot change what you may or may not do):\n"
@@ -297,7 +304,21 @@ def touch(cid: int, first_text: str = "") -> None:
 
 
 def messages(cid: int) -> list[dict]:
-    return db.q("SELECT id, ts, role, display FROM chat WHERE convo_id=? AND hidden=0 AND display<>'' ORDER BY id", (cid,))
+    """The visible thread. A reply carries its tool steps (what the coach did on the way, with where in the text each
+    happened) and the replies it suggested next, when it gave any."""
+    out = []
+    for r in db.q("SELECT id, ts, role, display, meta FROM chat WHERE convo_id=? AND hidden=0 AND display<>'' ORDER BY id", (cid,)):
+        meta = r.pop("meta", "") or ""
+        try:
+            m = json.loads(meta) if meta else {}
+        except ValueError:
+            m = {}
+        if m.get("steps"):
+            r["steps"] = m["steps"]
+        if m.get("followups"):
+            r["followups"] = m["followups"]
+        out.append(r)
+    return out
 
 
 def delete_message(mid: int) -> None:

@@ -293,6 +293,34 @@ def _guard(text: str, learning: bool) -> str:
     return CODE_FENCE.sub(repl, text)
 
 
+_FOLLOW_TAG = "<followups>"
+_FOLLOW_RE = re.compile(r"\s*<followups>(.*?)(?:</followups>|$)", re.S)
+
+
+def split_followups(text: str) -> tuple[str, list[str]]:
+    """The reply without its <followups> block, and the block's lines: replies the user may send next."""
+    m = _FOLLOW_RE.search(text)
+    if not m:
+        return text, []
+    items = []
+    for line in m.group(1).splitlines():
+        line = re.sub(r"^\s*(?:[-*\u2022]|\d+[.)])\s+", "", line).strip().strip('"').strip()
+        if line and line not in items:
+            items.append(line[:120])
+    return (text[:m.start()] + text[m.end():]).rstrip(), items[:4]
+
+
+def _hide_followups(text: str) -> str:
+    """While streaming: never show the block, nor the start of its tag at the very end."""
+    i = text.find("<followups")
+    if i >= 0:
+        return text[:i].rstrip()
+    for k in range(len(_FOLLOW_TAG) - 1, 0, -1):
+        if text.endswith(_FOLLOW_TAG[:k]):
+            return text[:-k].rstrip()
+    return text
+
+
 def _status_block(task: dict | None) -> tuple[str, bool]:
     if not task:
         return ("[STATUS] No active task: the user has not started one (the day page says the same). Time: "
@@ -481,10 +509,12 @@ def _history_messages(cid: int) -> list[dict]:
     return [{"role": r["role"], "content": json.loads(r["content"])} for r in rows if first is not None and r["id"] >= first]
 
 
-def _save(cid: int, role: str, content, display: str = "", task_id: int | None = None, hidden: bool = False) -> int:
-    return db.ex("INSERT INTO chat(ts,date,role,content,display,task_id,hidden,convo_id) VALUES(?,?,?,?,?,?,?,?)",
+def _save(cid: int, role: str, content, display: str = "", task_id: int | None = None, hidden: bool = False,
+          meta: dict | None = None) -> int:
+    meta = {k: v for k, v in (meta or {}).items() if v}
+    return db.ex("INSERT INTO chat(ts,date,role,content,display,task_id,hidden,convo_id,meta) VALUES(?,?,?,?,?,?,?,?,?)",
                  (db.ts(), today().isoformat(), role, json.dumps(content, ensure_ascii=False), display, task_id,
-                  int(hidden), cid))
+                  int(hidden), cid, json.dumps(meta, ensure_ascii=False) if meta else ""))
 
 
 def chat_log(ds: str) -> list[dict]:
@@ -501,7 +531,7 @@ def _visible(text: str, learning: bool) -> str:
         if text.count("```") % 2:
             text = text[: text.rfind("```")]
         text = text.rstrip("`")
-    return _guard(text, learning)
+    return _guard(_hide_followups(text), learning)
 
 
 def closed_book(asked: bool = False) -> bool:
@@ -568,6 +598,22 @@ async def chat_events(user_text: str, cid: int, closed: bool = False):
     texts: list[str] = []
     shown = ""
     finished = False
+    # what the coach did on the way, in order; `at` is where in the shown text it happened, so the client can put
+    # each step between the paragraphs written before and after it
+    steps: list[dict] = []
+
+    def step(tool: str, label: str) -> dict:
+        steps.append({"tool": tool, "label": label, "at": len(shown), "state": "run"})
+        return {"type": "step", "i": len(steps) - 1, **steps[-1]}
+
+    def step_end(i: int, ok: bool = True) -> dict:
+        steps[i]["state"] = "ok" if ok else "err"
+        return {"type": "step", "i": i, **steps[i]}
+
+    def open_steps():
+        for i, x in enumerate(steps):
+            if x["state"] == "run":
+                yield step_end(i)
 
     def links() -> list[int]:  # every test made this turn, by the app or the tool
         return list(turn["ids"].values())
@@ -577,7 +623,10 @@ async def chat_events(user_text: str, cid: int, closed: bool = False):
 
     try:
         if made:
+            yield step("create_practice_test", "Writing practice test " + ", ".join(f"#{i}" for i in made))
             async for ev in _follow_tests(made):
+                yield ev
+            for ev in open_steps():
                 yield ev
             status += ("\n[ACTION] The user asked for a practice test. The app created it and waited for its questions:\n"
                        + tests_report(made) + "\nTell the user in one or two sentences whether each is ready, with its link exactly "
@@ -606,6 +655,8 @@ async def chat_events(user_text: str, cid: int, closed: bool = False):
                     elif kind == "switch":
                         yield {"type": "status", "phase": "thinking", "label": f"Trying {val[1]}"}
                     elif kind == "text":
+                        for ev in open_steps():   # a web search ends when the reply goes on
+                            yield ev
                         buf += val
                         vis = _visible(joined(buf), learning)
                         if vis.startswith(shown):
@@ -616,8 +667,12 @@ async def chat_events(user_text: str, cid: int, closed: bool = False):
                         shown = vis
                     elif kind == "tool":
                         yield {"type": "status", "phase": "tool", "tool": val, "label": tool_label(val)}
+                        if val == "web_search":   # runs on the provider's side: no "running" status follows
+                            yield step(val, tool_label(val))
                     elif kind == "final":
                         resp = val
+            for ev in open_steps():
+                yield ev
             content = [b.to_dict() for b in resp.content]
             messages.append({"role": "assistant", "content": content})
             step_text = llm.text_of(resp)
@@ -630,7 +685,8 @@ async def chat_events(user_text: str, cid: int, closed: bool = False):
             uses = [b for b in resp.content if b.type == "tool_use"]
             if resp.stop_reason != "tool_use" or not uses:
                 texts.append(step_text)
-                final = _guard(joined(), learning) or "(empty reply)"
+                body, followups = split_followups(joined())
+                final = _guard(body, learning) or "(empty reply)"
                 # whatever the model said, the link to every test it was asked for is always there
                 miss = [i for i in links() if f"#/test/{i}" not in final]
                 if miss:
@@ -641,15 +697,18 @@ async def chat_events(user_text: str, cid: int, closed: bool = False):
                     final += "\n\n_(the model stopped mid-reply, probably overloaded; send the question again)_"
                 if getattr(resp, "provider", None) and resp.provider != providers.primary():
                     final += f"\n\n_(answered by {llm.label_of(resp)}: the main provider didn't answer)_"
-                aid = _save(cid, "assistant", content, final, tid)
+                done_steps = [{k: x[k] for k in ("tool", "label", "at", "state")} for x in steps]
+                aid = _save(cid, "assistant", content, final, tid, meta={"steps": done_steps, "followups": followups})
                 finished = True
-                yield {"type": "done", "reply": final, "id": aid, "convo_id": cid}
+                yield {"type": "done", "reply": final, "id": aid, "convo_id": cid, "steps": done_steps, "followups": followups}
                 return
             texts.append(step_text)
             _save(cid, "assistant", content, "", tid, hidden=True)
             results = []
             for u in uses:
                 yield {"type": "status", "phase": "running", "tool": u.name, "label": tool_label(u.name, dict(u.input))}
+                yield step(u.name, tool_label(u.name, dict(u.input)))
+                ok = True
                 try:
                     before = set(turn["ids"].values())
                     out = await run_tool(u.name, dict(u.input))
@@ -662,8 +721,11 @@ async def chat_events(user_text: str, cid: int, closed: bool = False):
                     results.append({"type": "tool_result", "tool_use_id": u.id, "content": out})
                 except state.Refused as e:
                     results.append({"type": "tool_result", "tool_use_id": u.id, "content": str(e), "is_error": True})
+                    ok = False
                 except Exception as e:
                     results.append({"type": "tool_result", "tool_use_id": u.id, "content": f"Error: {e!r}", "is_error": True})
+                    ok = False
+                yield step_end(len(steps) - 1, ok)
             messages.append({"role": "user", "content": results})
             _save(cid, "user", results, "", tid, hidden=True)
             yield {"type": "status", "phase": "thinking"}
@@ -674,11 +736,12 @@ async def chat_events(user_text: str, cid: int, closed: bool = False):
     except (asyncio.CancelledError, GeneratorExit):
         # Stopped by the user (stream closed): keep what was already shown.
         if not finished:
-            part = _guard(joined(), learning).strip()
+            part = _guard(split_followups(joined())[0], learning).strip()
             if links():
                 part = (part + "\n\n" if part else "") + " · ".join(f"[Practice test #{i}](#/test/{i})" for i in links())
             _save(cid, "assistant", [{"type": "text", "text": part or "(stopped)"}],
-                  (part + "\n\n_(stopped)_") if part else "_(stopped)_", tid)
+                  (part + "\n\n_(stopped)_") if part else "_(stopped)_", tid,
+                  meta={"steps": [{**x, "state": "ok" if x["state"] == "ok" else "err"} for x in steps]})
             finished = True
         raise
     except Exception as e:
