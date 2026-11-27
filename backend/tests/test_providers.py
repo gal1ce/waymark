@@ -478,3 +478,21 @@ def test_a_used_up_google_account_is_a_quota_failure(fake_gemini, monkeypatch):
     monkeypatch.setenv("FAKE_MODE", "quota")
     with pytest.raises(llm.Unavailable, match="daily Gemini limit"):
         asyncio.run(llm.create(system="s", messages=[{"role": "user", "content": "hi"}]))
+
+
+def test_a_subscription_lists_full_model_names_too(monkeypatch):
+    """Besides the aliases (newest of each line) a subscription offers models by full name: Claude's known ones, and
+    for Gemini whatever `gemini --list-models` says the account can use."""
+    import asyncio
+    import subprocess
+    from app import cli, providers as prov
+    ids = [c["id"] for c in asyncio.run(cli.catalog("claude_code"))]
+    assert ids[:4] == ["sonnet", "opus", "haiku", "fable"]
+    assert {"claude-opus-5-5", "claude-opus-4-6", "claude-sonnet-4-6"} <= set(ids)
+
+    listed = "Available Gemini Models:\n\nauto (Auto)\n  Description:   x\n\ngemini-2.5-pro (gemini-2.5-pro)\n  Context limit: 1\n"
+    monkeypatch.setattr(prov, "installed", lambda pid: "/usr/bin/gemini")
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, listed, ""))
+    cli._LISTED.clear()
+    ids = [c["id"] for c in asyncio.run(cli.catalog("gemini_cli"))]
+    assert ids == ["pro", "flash", "flash-lite", "auto", "gemini-2.5-pro"]     # "auto" isn't listed twice
