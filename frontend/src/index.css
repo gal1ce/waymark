@@ -4065,3 +4065,37 @@ body.is-sorting, body.is-sorting * { cursor: grabbing !important; user-select: n
 .set-shell .ai-row-head { padding: 6px 0; }
 .set-shell .ai-row-btn { border-radius: var(--r-ctl); }
 .set-shell .ai { padding: 6px 0 0; }
+
+/* ================================================================= Today and Home: one column of headed lists
+   (the Settings language). The card for what to do now is the one box on Today. */
+.page.day-page { max-width: 880px; gap: 36px; }
+.day-page .sg + .sg { margin-top: 0; }
+.dblk + .dblk { border-top: 1px solid var(--line); }
+.dblk-h { display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 4px; border: 0; background: none; color: var(--t1); cursor: pointer; text-align: left; border-radius: var(--r-row); }
+.dblk-h:hover { background: var(--s-hover); }
+.dblk-h[aria-disabled='true'] { cursor: default; }
+.dblk-h > svg { color: var(--t3); flex: none; }
+.dblk-time { font-size: 12px; color: var(--t3); min-width: 88px; font-variant-numeric: tabular-nums; }
+.dblk-t { font-size: 15px; font-weight: 600; }
+.dblk-sum { margin-left: auto; font-size: 12px; color: var(--t3); white-space: nowrap; }
+.dblk.now .dblk-time { color: var(--accent-text); }
+.dblk.past:not(.now) .dblk-t { color: var(--t2); }
+.dblk-b { padding: 0 0 10px 26px; }
+.dblk-b .task { border-top: 1px solid var(--line); }
+.dblk-b .task-row { padding: 10px 8px; border-radius: var(--r-row); }
+.dblk-b .task-body { padding: 4px 8px 16px 40px; }
+.why-b { padding: 14px 0 4px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 22px; color: var(--t2); }
+.why-b p { margin: 0; max-width: 72ch; }
+.why-b ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.day-page .stuck-list, .day-page .stuck-form, .day-page .empty { margin-top: 12px; }
+.day-page .notes-box { width: 100%; min-height: 96px; margin-top: 14px; resize: vertical; }
+.day-page .checklist { margin: 12px 0 0; }
+/* Home: a row's value with a thin bar under it (a week's hours against the target) */
+.home-v { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 160px; }
+.home-v .thin-bar { width: 160px; }
+.home-next { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.home-next .k { font-size: 12px; color: var(--t3); }
+.home-next .tt { font-size: 18px; line-height: 26px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.home-later { list-style: none; margin: 0; padding: 0; }
+.home-later li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; color: var(--t2); }
+.home-later li .mono { font-size: 12px; color: var(--t3); }

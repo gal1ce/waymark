@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Markdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkMath from 'remark-math'
@@ -13,12 +13,13 @@ import { dayName, t as tr, tx } from './i18n'
 import { Select } from './controls'
 import { stuckDetail, stuckSummary } from './stuck'
 import { bumpXp } from './prefs'
-import { BLOCK_LABEL, KIND_LABEL, PageHead, ScoreBar, Section, SOURCE_LABEL, useFold } from './ui'
+import { BLOCK_LABEL, KIND_LABEL, PageHead, ScoreBar, SOURCE_LABEL, useFold } from './ui'
 import { busyProps, useBusy, useShake } from './interact'
 import { KhanTestLauncher, KhanUnitPanel } from './Khan'
 import { Fold } from './Fold'
 import { CoachMd } from './Coach'
 import { fixMathInMd } from './mathtex'
+import { Group, useSaved } from './settingsui'
 
 export function useLive(day: Day | null, tick: number) {
   const fetched = useRef(0)
@@ -76,7 +77,7 @@ export default function DayView({ date, ctx }: { date: string; ctx: Ctx }) {
   const shownN = rows.reduce((a, r) => a + r.tasks.length, 0)
 
   return (
-    <div className="page wide">
+    <div className="page day-page">
       <PageHead
         title={`${weekday(day.date)}, ${fmtDate(day.date)}`}
         sub={<>{tr('Week {n}', { n: weekNo(day.week) })} · {st}{ver && <> · <span className="ver" title={verWhy}>{ver}</span></>}</>}
@@ -85,10 +86,7 @@ export default function DayView({ date, ctx }: { date: string; ctx: Ctx }) {
             <div className="big">{fmtDur(spent)}</div>
             <div className="small">{tr('plan {t}', { t: fmtMin(day.progress.est_total_min) })} · {day.progress.done}/{day.progress.total} {tr('tasks')}</div>
           </div>
-        ) : undefined}>
-        {day.adapt_note && <div className="note">{day.adapt_note}</div>}
-        {open && <WhyPlan day={day} />}
-      </PageHead>
+        ) : undefined} />
       <WeekStrip date={day.date} ctx={ctx} />
       {day.extra && <ExtraDayNote day={day} ctx={ctx} />}
 
@@ -105,45 +103,21 @@ export default function DayView({ date, ctx }: { date: string; ctx: Ctx }) {
         {day.status === 'locked' && day.outline && day.outline.length > 0 && <Outline items={day.outline} />}
       </>) : (
         <>
-          {/* what to do now comes first; the day's timeline and its tasks follow */}
+          {/* what to do now is the one card on the page; the rest are headed lists, in the order of the day */}
           {active && <Current task={current} next={next} live={live} ctx={ctx} />}
-          <Ruler day={day} blocks={blocks} />
-          <div className="day-grid">
-            <div className="timeline">
-              <div className="tl-tools">
-                {filtering && (
-                  <span className="tl-count" role="status">
-                    {tr('{a} of {b} tasks', { a: shownN, b: total })}
-                    <button type="button" className="link" onClick={() => setFilter(NO_FILTER)}>{tr('Clear')}</button>
-                  </span>
-                )}
-                <FilterMenu opts={opts} filter={filter} setFilter={setFilter} shown={shownN} active={filtering} />
-              </div>
-              {rows.map(({ b, tasks: ts }) => (
-                <BlockRow key={b.id} block={b} tasks={ts} filtered={filtering} day={day} live={live} ctx={ctx} />
-              ))}
-              {filtering && rows.length === 0 && (
-                <div className="card banner">
-                  <span>{tr('No tasks on this day match the filters')}</span>
-                  <button type="button" className="link" onClick={() => setFilter(NO_FILTER)}>{tr('Clear filters')}</button>
-                </div>
-              )}
-              {/* the day's own end follows its last block: notes and closing, side by side as equals */}
-              {(active || day.status === 'closed' || day.status === 'past') && (
-                <div className="day-end">
-                  <DayNotes day={day} ctx={ctx} />
-                  {active && <CloseDay day={day} ctx={ctx} />}
-                </div>
-              )}
-            </div>
-            {/* the rail is the day at a glance: shorter than the blocks, and it stays in view while they scroll */}
-            <div className="stack rail">
-              <DaySummary day={day} spent={spent} />
-              <Section title={tr('Sticking points')} meta={tr('{n} open', { n: (day.stuck ?? []).filter((s) => !s.resolved).length })}>
-                <StuckList items={day.stuck ?? []} canEdit={active} current={current} ctx={ctx} />
-              </Section>
-            </div>
-          </div>
+          <Group title={tr('Tasks')} note={filtering ? <>{tr('{a} of {b} tasks', { a: shownN, b: total })} · <button type="button" className="linkish" onClick={() => setFilter(NO_FILTER)}>{tr('Clear')}</button></> : undefined}
+            action={<FilterMenu opts={opts} filter={filter} setFilter={setFilter} shown={shownN} active={filtering} />}>
+            {rows.map(({ b, tasks: ts }) => (
+              <BlockRow key={b.id} block={b} tasks={ts} filtered={filtering} day={day} live={live} ctx={ctx} />
+            ))}
+            {filtering && rows.length === 0 && <p className="sg-p">{tr('No tasks on this day match the filters')}</p>}
+          </Group>
+          <WhyPlan day={day} />
+          <Group title={tr('Sticking points')} note={tr('{n} open', { n: (day.stuck ?? []).filter((s) => !s.resolved).length })}>
+            <StuckList items={day.stuck ?? []} canEdit={active} current={current} ctx={ctx} />
+          </Group>
+          {(active || day.status === 'closed' || day.status === 'past') && <DayNotes day={day} ctx={ctx} />}
+          {active && <CloseDay day={day} ctx={ctx} />}
         </>
       )}
     </div>
@@ -268,47 +242,6 @@ function WeekStrip({ date, ctx }: { date: string; ctx: Ctx }) {
   )
 }
 
-/** The ruler spans the day's own blocks, whole hours either side (the CTU plan's 10:00–22:00 by default). */
-function span(blocks: Block[]): [number, number] {
-  if (!blocks.length) return [10 * 60, 22 * 60]
-  const lo = Math.floor(Math.min(...blocks.map((b) => toMin(b.start))) / 120) * 120
-  const hi = Math.ceil(Math.max(...blocks.map((b) => toMin(b.end))) / 120) * 120
-  return [lo, Math.max(hi, lo + 240)]
-}
-
-export function Ruler({ day, blocks }: { day: Day; blocks: Block[] }) {
-  const [DAY_START, DAY_END] = span(blocks)
-  const pos = (m: number) => `${((m - DAY_START) / (DAY_END - DAY_START)) * 100}%`
-  const ticks = Array.from({ length: (DAY_END - DAY_START) / 120 + 1 }, (_, i) => DAY_START / 60 + i * 2)
-  const n = nowMin(day)
-  const showNow = day.status === 'active' && n >= DAY_START && n <= DAY_END
-  return (
-    <div className="ruler" data-ask={`Day schedule: ${blocks.map((b) => `${b.start}–${b.end} ${blockTitle(b.title)}`).join(', ')}`}>
-      <div className="ruler-track">
-        {blocks.map((b) => {
-          const s = toMin(b.start), e = toMin(b.end)
-          const est = b.tasks.reduce((a, t) => a + t.est_min, 0)
-          const done = b.tasks.filter((t) => t.status === 'done').reduce((a, t) => a + t.est_min, 0)
-          const pct = est ? Math.round((done / est) * 100) : 0
-          const cur = day.status === 'active' && n >= s && n < e
-          return (
-            <div key={b.id} className={`ruler-block${b.kind === 'break' ? ' break' : ''}${cur ? ' cur' : ''}`}
-              style={{ left: `calc(${pos(s)} + 2px)`, width: `calc(${pos(e)} - ${pos(s)} - 4px)` }} title={`${b.start}–${b.end} ${blockTitle(b.title)}`}>
-              {b.kind !== 'break' && <div className="fill" style={{ '--p': pct / 100 } as CSSProperties} />}
-              {b.kind !== 'break' && e - s >= 60 && <span className="lbl">{blockTitle(b.title)}</span>}
-              {b.kind !== 'break' && e - s >= 60 && est > 0 && <span className="pct">{pct}%</span>}
-            </div>
-          )
-        })}
-        {showNow && <div className="ruler-now" style={{ left: pos(n) }} data-t={`${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`} />}
-      </div>
-      <div className="ruler-scale">
-        {ticks.map((h) => <span key={h} style={{ left: pos(h * 60) }}>{String(h).padStart(2, '0')}:00</span>)}
-      </div>
-    </div>
-  )
-}
-
 /** The running task, or the next one to start. */
 export function Current({ task, live, ctx, next }: { task: Task | null; live: (t: Task) => number; ctx: Ctx; next?: Task | null }) {
   const [busy, run] = useBusy()
@@ -363,18 +296,15 @@ function BlockRow({ block, tasks, filtered, day, live, ctx }: {
   // while filtering, blocks open so the matching tasks are in view; the fold you set comes back after
   const open = filtered || foldOpen
   return (
-    <div className={'tl-row' + (isNow ? ' now' : '') + (past ? ' past' : '') + (open ? '' : ' folded')}>
-      <div className="tl-time"><span>{block.start}</span><span className="t3">{block.end}</span></div>
-      <div className="card block" data-ask={`${title} block (${block.start}–${block.end})`}>
-        <button type="button" className="block-head fold-btn" aria-expanded={open} aria-disabled={filtered || undefined}
-          onClick={() => { if (!filtered) toggle() }}>
-          <span className="bt">{title}</span>
-          {isNow && <span className="now-tag">{tr('now')}</span>}
-          <span className="sum">{filtered && tasks.length < block.tasks.length ? `${tasks.length} / ` : ''}{done}/{block.tasks.length} · {fmtMin(est)}</span>
-          {!filtered && (open ? <ChevronDown size={16} strokeWidth={1.5} /> : <ChevronRight size={16} strokeWidth={1.5} />)}
-        </button>
-        {open && tasks.map((t) => <TaskRow key={t.id} t={t} day={day} live={live} ctx={ctx} />)}
-      </div>
+    <div className={'dblk' + (isNow ? ' now' : '') + (past ? ' past' : '') + (open ? '' : ' folded')} data-ask={`${title} block (${block.start}–${block.end})`}>
+      <button type="button" className="dblk-h" aria-expanded={open} aria-disabled={filtered || undefined} onClick={() => { if (!filtered) toggle() }}>
+        {!filtered && (open ? <ChevronDown size={16} strokeWidth={1.5} /> : <ChevronRight size={16} strokeWidth={1.5} />)}
+        <span className="dblk-time mono">{block.start}–{block.end}</span>
+        <span className="dblk-t">{title}</span>
+        {isNow && <span className="now-tag">{tr('now')}</span>}
+        <span className="dblk-sum mono">{filtered && tasks.length < block.tasks.length ? `${tasks.length} / ` : ''}{done}/{block.tasks.length} · {fmtMin(est)}</span>
+      </button>
+      {open && <div className="dblk-b">{tasks.map((t) => <TaskRow key={t.id} t={t} day={day} live={live} ctx={ctx} />)}</div>}
     </div>
   )
 }
@@ -495,15 +425,26 @@ function WhyPlan({ day }: { day: Day }) {
       }
     }
   }
-  if (!lines.length) return null
+  if (!lines.length && !day.adapt_note) return null
   const open = (day.stuck ?? []).filter((x) => !x.resolved).length
   if (open) lines.push(tr(open === 1 ? '1 sticking point from today is open: the end-of-day test asks about it again, and the coach sees open ones when it plans a new day.' : '{n} sticking points from today are open: the end-of-day test asks about them again, and the coach sees open ones when it plans a new day.', { n: open }))
+  return <WhyFold note={day.adapt_note} lines={lines} />
+}
+
+function WhyFold({ note, lines }: { note?: string | null; lines: string[] }) {
+  const [open, setOpen] = useState(false)
   return (
-    <details className="why-plan">
-      <summary>{tr('Why this plan?')}</summary>
-      <ul>{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
-      <div className="t3 small">{tr('Each track goes through its units in order: study, problems, then a closed-book unit check. Below the pass mark the unit is studied again and the check retaken before the track moves on. Days are written a few days ahead; one you haven’t started can still change, for example when you ask the coach to rewrite it.')}</div>
-    </details>
+    <Group title={tr('Why this plan?')} note={tr('Where each course is, and what moved here and why.')}
+      action={<button type="button" className="btn ghost sm" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? <ChevronDown size={14} strokeWidth={1.6} /> : <ChevronRight size={14} strokeWidth={1.6} />}<span>{open ? tr('Hide') : tr('Show')}</span></button>}>
+      {open && (
+        <div className="why-b">
+          {note && <p>{note}</p>}
+          {lines.length > 0 && <ul>{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>}
+          <p className="t3 small">{tr('Each track goes through its units in order: study, problems, then a closed-book unit check. Below the pass mark the unit is studied again and the check retaken before the track moves on. Days are written a few days ahead; one you haven’t started can still change, for example when you ask the coach to rewrite it.')}</p>
+        </div>
+      )}
+    </Group>
   )
 }
 
@@ -685,28 +626,6 @@ function TestLauncher({ t, day, ctx }: { t: Task; day: Day; ctx: Ctx }) {
   )
 }
 
-function DaySummary({ day, spent }: { day: Day; spent: number }) {
-  const p = day.progress!
-  const byBlock = useMemo(() => {
-    const m: Record<string, number> = {}
-    for (const b of day.blocks ?? []) for (const t of b.tasks) if (b.kind !== 'test' && b.kind !== 'break') {
-      const k = blockTitle(b.title).replace(' II', '')
-      m[k] = (m[k] ?? 0) + t.spent_sec_live
-    }
-    return Object.entries(m)
-  }, [day])
-  const pct = p.est_total_min ? Math.round((p.est_done_min / p.est_total_min) * 100) : 0
-  return (
-    <Section title={tr('Day')} meta={fmtDur(spent)}>
-      <div className="kv"><span>{tr('Tasks done')}</span><b>{p.done}/{p.total}</b></div>
-      <div className="kv"><span>{tr('Plan progress')}</span><b>{pct}%</b></div>
-      <div className="thin-bar"><div style={{ transform: `scaleX(${pct / 100})` }} /></div>
-      <div className="kv-gap" />
-      {byBlock.map(([k, s]) => <div className="kv" key={k}><span>{k}</span><b>{fmtMin(Math.round(s / 60))}</b></div>)}
-      {day.test?.status === 'submitted' && <div className="kv"><span>{tr('End-of-day test')}</span><b>{day.test.score}/{day.test.max}</b></div>}
-    </Section>
-  )
-}
 
 export function StuckList({ items, canEdit, current, ctx, showDate }: { items: (Stuck & { date?: string })[]; canEdit: boolean; current: Task | null; ctx: Ctx; showDate?: boolean }) {
   const [text, setText] = useState('')
@@ -714,7 +633,7 @@ export function StuckList({ items, canEdit, current, ctx, showDate }: { items: (
   const [shaking, shake] = useShake()
   return (
     <>
-      {canEdit && (
+      {canEdit && current && (
         <form className="inline-form stuck-form" onSubmit={(e) => {
           e.preventDefault(); if (!text.trim()) { shake(); return }
           run(async () => { await ctx.run(api.stuck(text, current?.id)); setText(''); ctx.refresh() })
@@ -748,12 +667,20 @@ function CloseDay({ day, ctx }: { day: Day; ctx: Ctx }) {
   const ask = () => run(async () => { const r = await ctx.run(api.closeCheck(day.date)); if (r) { setItems(r.checklist); setSure(true) } })
   const missing = (items ?? []).filter((c) => !c.ok && !c.optional)
   return (
-    <Section title={tr('Close the day')}>
-      <div className="close-note">
-        {ctx.meta?.plan?.key === 'ctu'
-          ? tr("The day's log is written to PROGRESS.md, unfinished work moves to the next suitable day, and tomorrow is rebuilt from today's results. It also closes on its own at midnight")
-          : tr("Unfinished work moves to the next suitable day and tomorrow is rebuilt from today's results. It also closes on its own at midnight")}
-      </div>
+    <Group title={tr('Close the day')}
+      note={ctx.meta?.plan?.key === 'ctu'
+        ? tr("The day's log is written to PROGRESS.md, unfinished work moves to the next suitable day, and tomorrow is rebuilt from today's results. It also closes on its own at midnight")
+        : tr("Unfinished work moves to the next suitable day and tomorrow is rebuilt from today's results. It also closes on its own at midnight")}
+      action={!sure
+        ? <button className="btn sm" {...busyProps(busy)} onClick={ask}><span>{tr('Close the day')}</span></button>
+        : <>
+            <button className="btn ghost sm" onClick={() => setSure(false)}>{tr('Cancel')}</button>
+            <button className="btn primary sm" {...busyProps(busy)} onClick={() => run(async () => {
+              const ok = await ctx.run(api.close(day.date, missing.length > 0))
+              setSure(false)
+              if (ok) { ctx.notify(tr('Closing the day, rebuilding tomorrow')); ctx.refresh() }
+            })}><span>{missing.length ? tr('Close anyway') : tr('Yes, close')}</span></button>
+          </>}>
       {sure && items && (
         <ul className="checklist" aria-label={tr('Before closing')}>
           {items.map((c) => (
@@ -763,40 +690,24 @@ function CloseDay({ day, ctx }: { day: Day; ctx: Ctx }) {
           ))}
         </ul>
       )}
-      <div className="inline-form end close-acts">
-        {!sure
-          ? <button className="btn" {...busyProps(busy)} onClick={ask}><span>{tr('Close the day')}</span></button>
-          : <>
-              <button className="btn ghost" onClick={() => setSure(false)}>{tr('Cancel')}</button>
-              <button className="btn light" {...busyProps(busy)} onClick={() => run(async () => {
-                const ok = await ctx.run(api.close(day.date, missing.length > 0))
-                setSure(false)
-                if (ok) { ctx.notify(tr('Closing the day, rebuilding tomorrow')); ctx.refresh() }
-              })}><span>{missing.length ? tr('Close anyway') : tr('Yes, close')}</span></button>
-            </>}
-      </div>
-    </Section>
+    </Group>
   )
 }
 
 /** What happened today in the user's words; written into the day's PROGRESS.md section (also after closing). */
 function DayNotes({ day, ctx }: { day: Day; ctx: Ctx }) {
-  const [draft, setDraft] = useState<string | null>(null)   // null: not editing, show what is saved
-  const [busy, run] = useBusy()
+  const [draft, setDraft] = useState<string | null>(null)   // null: not edited, show what is saved
+  const [saved, markSaved] = useSaved()
+  const save = async () => {
+    if (draft === null || draft === (day.summary ?? '')) { setDraft(null); return }
+    const r = await ctx.run(api.notes(day.date, draft))
+    if (r) { setDraft(null); markSaved(); ctx.refresh() }
+  }
   return (
-    <Section title={tr('Day notes')} meta={ctx.meta?.plan?.key !== 'ctu' ? tr('saved with the day') : day.status === 'active' ? tr('go into PROGRESS.md') : tr('PROGRESS.md is updated on save')}>
+    <Group title={tr('Day notes')} saved={saved} note={ctx.meta?.plan?.key !== 'ctu' ? tr('Saved with the day when you leave the box.') : tr('Saved into PROGRESS.md when you leave the box.')}>
       <textarea className="input notes-box" value={draft ?? day.summary ?? ''} placeholder={tr("What went well, what didn't, what to look at tomorrow")}
-        aria-label={tr('Day notes')} onChange={(e) => setDraft(e.target.value)} />
-      {draft !== null && (
-        <div className="inline-form end">
-          <button className="btn ghost" onClick={() => setDraft(null)}>{tr('Cancel')}</button>
-          <button className="btn primary" {...busyProps(busy)} onClick={() => run(async () => {
-            const r = await ctx.run(api.notes(day.date, draft))
-            if (r) { setDraft(null); ctx.notify(tr('Notes saved')); ctx.refresh() }
-          })}><span>{tr('Save')}</span></button>
-        </div>
-      )}
-    </Section>
+        aria-label={tr('Day notes')} onChange={(e) => setDraft(e.target.value)} onBlur={save} />
+    </Group>
   )
 }
 

@@ -242,6 +242,9 @@ const TR = {
   'Visual style': 'Görünüş', 'Light or dark, or follow this computer.': 'Açık ya da koyu, ya da bu bilgisayarı izlesin.',
   'Buttons, links, the selection and focus rings.': 'Düğmeler, linkler, seçim ve odak halkaları.', 'Language of the app': 'Uygulamanın dili',
   'Drag a row to change the order: the first one that is set up answers. Open one for its keys and models.': 'Sırayı değiştirmek için bir satırı sürükle: kurulu olan ilk sağlayıcı cevap verir. Anahtarları ve modelleri için birini aç.',
+  // Today and Home (DayView, Dashboard)
+  'After that': 'Ardından', 'Study time': 'Çalışma süresi', 'Tasks': 'Görevler', 'Where each course is, and what moved here and why.': 'Her dersin nerede olduğu, buraya neyin neden geldiği.',
+  'Saved with the day when you leave the box.': 'Kutudan çıkınca günle birlikte kaydedilir.', 'Saved into PROGRESS.md when you leave the box.': 'Kutudan çıkınca PROGRESS.md dosyasına kaydedilir.',
   'Demo clock': 'Demo saati', 'Details': 'Ayrıntılar', 'Show': 'Göster', 'Hide': 'Gizle', 'Download': 'İndir', 'Copy the full path': 'Tam yolu kopyala',
   'What you study, by when, and the units in it.': 'Ne çalıştığın, ne zamana kadar ve içindeki üniteler.',
   'Who writes your plans and tests and answers in the coach chat.': 'Planlarını ve testlerini kim yazar, koç sohbetinde kim cevap verir.',
