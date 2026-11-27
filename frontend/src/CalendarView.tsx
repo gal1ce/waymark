@@ -64,7 +64,6 @@ export default function CalendarView({ month, ctx }: { month?: string; ctx: Ctx 
                 {d.status === 'locked' && <Lock size={12} strokeWidth={1.5} className="t3" />}
                 {d.week != null && new Date(d.date + 'T12:00:00').getDay() === 1 && <span className="cal-w">{tr('W{n}', { n: weekNo(d.week) })}</span>}
               </div>
-              {d.status === 'off' && <span className="cal-meta">{tr('no study')}</span>}
               {cal?.exams?.[d.date] && <span className="cal-meta cal-dl"><GraduationCap size={11} strokeWidth={1.8} /> {tr('{c} exam', { c: cal.exams[d.date] })}</span>}
               {cal?.deadline === d.date && !cal?.exams?.[d.date] && <span className="cal-meta cal-dl"><Flag size={11} strokeWidth={1.8} /> {tr('deadline')}</span>}
               {cal?.end === d.date && <span className="cal-meta"><Flag size={11} strokeWidth={1.6} /> {tr('last unit')}</span>}

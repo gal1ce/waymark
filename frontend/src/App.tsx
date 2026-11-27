@@ -32,7 +32,7 @@ import { ConfirmDialog, NoticeBell, Toasts, type ConfirmOpts, type Toast } from 
 export type View =
   | { kind: 'nix'; id?: number } | { kind: 'dash' } | { kind: 'day'; date: string } | { kind: 'calendar'; month?: string } | { kind: 'progress' }
   | { kind: 'tests' } | { kind: 'test'; id: number } | { kind: 'profile' } | { kind: 'khanTest'; id: number }
-  | { kind: 'notes'; id?: number } | { kind: 'settings' } | { kind: 'setup' } | { kind: 'beej'; page: string; sec?: string }
+  | { kind: 'notes'; id?: number } | { kind: 'settings'; section?: string; sub?: string } | { kind: 'setup' } | { kind: 'beej'; page: string; sec?: string }
 
 export type Ctx = {
   /** a toast; warnings and errors are also kept in the notification history */
@@ -76,7 +76,7 @@ const toHash = (v: View): string => {
     case 'khanTest': return `#/khan-test/${v.id}`
     case 'profile': return '#/profile'
     case 'notes': return v.id ? `#/notes/${v.id}` : '#/notes'
-    case 'settings': return '#/settings'
+    case 'settings': return v.section ? `#/settings/${v.section}` + (v.sub ? `/${v.sub}` : '') : '#/settings'
     case 'setup': return '#/setup'
     case 'beej': return `#/beej/${v.page}` + (v.sec ? `/${v.sec}` : '')
   }
@@ -93,7 +93,7 @@ export const fromHash = (h: string): View => {
   if (a === 'profile' || a === 'profil' || a === 'gecmis') return { kind: 'profile' }
   if (a === 'today' || a === 'bugun') return { kind: 'day', date: '' }
   if (a === 'notes') return { kind: 'notes', id: b ? Number(b) : undefined }
-  if (a === 'settings') return { kind: 'settings' }
+  if (a === 'settings') return { kind: 'settings', section: b, sub: c }
   if (a === 'setup') return { kind: 'setup' }
   if (a === 'beej' && b) return { kind: 'beej', page: b, sec: c }
   // the app opens on the coach; #/overview is Home
@@ -142,11 +142,14 @@ export default function App() {
   const [ov, setOv] = useState<Overview | null>(null)
   const [today, setToday] = useState<Day | null>(null)
   const [view, setView] = useState<View>(() => fromHash(location.hash))
+  // where "Back to the app" in Settings returns to: the last page that wasn't a settings one
+  useEffect(() => { if (view.kind !== 'settings') try { sessionStorage.setItem('ctu.lastPage', location.hash || '#/') } catch { /* private window */ } }, [view])
   const [toasts, setToasts] = useState<Toast[]>([])
   const [reader, setReader] = useState<string | null>(null)
   const [coachOpen, setCoachOpen] = useState(() => store.get('ctu.coach', false))
   // the side: a wide sidebar (new chat, the pages, recent conversations) or the slim rail of icons
   const [navWide, setNavWide] = useState(() => store.get('ctu.navWide', true))
+  const wide = useWide()
   useEffect(() => store.set('ctu.navWide', navWide), [navWide])
   const [coachW, setCoachW] = useState(() => num.get('ctu.coachW', COACH_W))
   const [resizing, setResizing] = useState(false)
@@ -333,6 +336,15 @@ export default function App() {
   const sub = crumb ?? (view.kind === 'day' && view.date && view.date !== todayDate ? fmtDate(view.date)
     : view.kind === 'test' ? t('Test {n}', { n: view.id }) : view.kind === 'khanTest' ? t('Unit test') : null)
 
+  const runningSec = current ? current.spent_sec_live + Math.max(0, Math.floor((Date.now() - fetchedAt.current) / 1000)) : 0
+  const runningPill = current && (
+    <button className="running" onClick={() => go({ kind: 'day', date: todayDate })} title={t('Running task')}>
+      <span className="dot accent" />
+      <span className="running-t">{current.title}</span>
+      <span className="mono">{fmtDur(runningSec)}</span>
+    </button>
+  )
+
   return (
     <div className={`shell nav-${layout.nav}${navWide ? ' nav-wide' : ''} coach-${layout.coach}${sideCoach ? ' coach-on' : ''}${resizing ? ' resizing' : ''}`}
       style={{ '--coach-w': `${sideCoach ? clampCoach(coachW) : coachW}px` } as React.CSSProperties}>
@@ -345,31 +357,22 @@ export default function App() {
             {view.kind !== 'dash' && view.kind !== 'nix' && <><button onClick={() => go({ kind: 'dash' })}><House size={14} strokeWidth={1.6} />{t('Home')}</button><ChevronRight size={13} strokeWidth={1.6} /></>}
             {sub ? (
               <>
-                <button onClick={() => go(nav.find((n) => n.on)?.v ?? (view.kind === 'notes' ? { kind: 'notes' } : view))}>{page}</button>
+                <button onClick={() => go(nav.find((n) => n.on)?.v ?? (view.kind === 'notes' ? { kind: 'notes' } : view.kind === 'settings' ? { kind: 'settings' } : view))}>{page}</button>
                 <ChevronRight size={13} strokeWidth={1.6} /><span className="here">{sub}</span>
               </>
             ) : <span className="here">{page}</span>}
           </nav>
         )}
         <div className="topbar-r">
-          {current && (
-            <button className="running" onClick={() => go({ kind: 'day', date: todayDate })} title={t('Running task')}>
-              <span className="dot accent" />
-              <span className="running-t">{current.title}</span>
-              <span className="mono">{fmtDur(current.spent_sec_live + Math.max(0, Math.floor((Date.now() - fetchedAt.current) / 1000)))}</span>
-            </button>
-          )}
+          {meta?.fake_clock && <span className="demo-chip" title={t('CTU_NOW is set: this server works on copies, not your real data')}>{t('Demo clock')}</span>}
+          {!wide && runningPill}
           <Counters version={version} />
-          <NoticeBell version={version} confirm={confirm} go={(link) => { location.hash = link }} />
-          <button className="icon-btn theme-btn" onClick={() => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark')}
-            aria-label={t('Switch light or dark')} title={theme === 'system' ? t('Theme follows the system · click to pick') : t('Switch light or dark')}>
-            {document.documentElement.dataset.theme === 'dark' ? <Sun size={18} strokeWidth={1.6} /> : <Moon size={18} strokeWidth={1.6} />}
-          </button>
           {!onNix && (
-            <button className={'btn ghost sm pill' + (coachOpen ? ' on' : '')} onClick={() => setCoachOpen((o) => !o)} aria-pressed={coachOpen} title={t('Coach panel  ]')}>
-              <MessageSquareText size={15} strokeWidth={1.6} />{meta?.coach_name || t('Coach')}
+            <button className={'btn ghost sm pill coach-toggle' + (coachOpen ? ' on' : '')} onClick={() => setCoachOpen((o) => !o)} aria-pressed={coachOpen} title={t('Coach panel  ]')}>
+              <MessageSquareText size={15} strokeWidth={1.6} /><span className="ct-l">{meta?.coach_name || t('Coach')}</span>
             </button>
           )}
+          <NoticeBell version={version} confirm={confirm} go={(link) => { location.hash = link }} />
           <AvatarMenu ctx={ctx} />
         </div>
       </header>
@@ -398,6 +401,20 @@ export default function App() {
           ))}
         </nav>
         {!noPlan && <Recents ctx={ctx} active={view.kind === 'nix' ? view.id ?? null : null} onOpen={(id) => go({ kind: 'nix', id })} />}
+        {wide && (
+          <div className="side-foot">
+            {current && (
+              <button className="side-now" onClick={() => go({ kind: 'day', date: todayDate })} title={current.title}>
+                <span className="side-now-i"><span className="dot accent" /></span>
+                <span className="side-now-b">
+                  <span className="side-now-l">{t('Running task')}</span>
+                  <span className="side-now-t">{current.title}</span>
+                </span>
+                <span className="side-now-c mono">{fmtDur(runningSec)}</span>
+              </button>
+            )}
+          </div>
+        )}
       </aside>
 
       <div className="center">
@@ -425,7 +442,7 @@ export default function App() {
           {view.kind === 'khanTest' && <KhanTestPage id={view.id} ctx={ctx} />}
           {view.kind === 'profile' && <ProfileView ctx={ctx} />}
           {view.kind === 'notes' && <Notes id={view.id} ctx={ctx} />}
-          {view.kind === 'settings' && <SettingsView ctx={ctx} />}
+          {view.kind === 'settings' && <SettingsView section={view.section} sub={view.sub} ctx={ctx} />}
           {view.kind === 'beej' && <BeejPage page={view.page} sec={view.sec} ctx={ctx} />}
         </main>
         <Scrollbar key={view.kind + ('id' in view ? String(view.id) : '')} target={mainRef} />
@@ -540,6 +557,19 @@ function useDismiss(open: boolean, close: () => void) {
   return ref
 }
 
+/** Desktop width: the sidebar is a column (not the phone's tab bar), so the account and counters live at its foot. */
+function useWide() {
+  const q = '(min-width: 861px)'
+  const [wide, setWide] = useState(() => window.matchMedia(q).matches)
+  useEffect(() => {
+    const m = window.matchMedia(q)
+    const on = () => setWide(m.matches)
+    m.addEventListener('change', on)
+    return () => m.removeEventListener('change', on)
+  }, [])
+  return wide
+}
+
 function AvatarMenu({ ctx }: { ctx: Ctx }) {
   const [open, setOpen] = useState(false)
   // who is signed in: the GitHub profile when the user chose it, otherwise the local account
@@ -628,19 +658,18 @@ function CtxMenu({ x, y, children }: { x: number; y: number; children: ReactNode
   )
 }
 
-/** Problems the server can't fix by itself (a failed close step, a stopped watcher, ...), until they're gone. */
+/** The one problem that shows over every page: a day that couldn't be closed (the plan stops moving until it is).
+    Every other warning is in the bell and in Settings → System health. */
 function Warnings({ meta, ctx }: { meta: Meta | null; ctx: Ctx }) {
-  const ws = Object.entries(meta?.warnings ?? {})
-  if (!ws.length && !meta?.fake_clock) return null
+  const ws = Object.entries(meta?.warnings ?? {}).filter(([k]) => k.startsWith('close_'))
+  if (!ws.length) return null
   return (
     <div className="warnbar" role="status">
-      {meta?.fake_clock && <div className="warnrow"><CircleAlert size={15} strokeWidth={1.5} /><span><b>{t('Demo clock.')}</b> {t('CTU_NOW is set: this server works on copies, not your real data')}</span></div>}
       {ws.map(([k, w]) => (
         <div key={k} className="warnrow">
           <CircleAlert size={15} strokeWidth={1.5} />
           <span>{w.message}</span>
-          <button className="link" onClick={() => ctx.go({ kind: 'settings' })}>{t('Health')}</button>
-          <button className="link" onClick={async () => { await ctx.run(api.dismissWarning(k)); ctx.refresh() }}>{t('Dismiss')}</button>
+          <button className="link" onClick={() => ctx.go({ kind: 'settings', section: 'health' })}>{t('Details')}</button>
         </div>
       ))}
     </div>

@@ -201,3 +201,78 @@ def test_only_the_plan_draft_and_the_coach_may_search_the_web(client, monkeypatc
     client.post("/api/onboarding/approve", json={"confirm": True}, headers=H)
     asyncio.run(planner.ensure_horizon())
     assert seen[0] == ("draft", True) and ("day", True) not in seen and ("day", False) in seen
+
+
+# ------------------------------------------------------------------ a plan that starts on a later day
+def _approve_starting(client, monkeypatch, start):
+    _fake_model(monkeypatch)
+    client.post("/api/onboarding/draft", json={"answers": {**ANSWERS, "start_date": start}}, headers=H)
+    asyncio.run(onboarding.run())
+    client.post("/api/onboarding/approve", json={"confirm": True}, headers=H)
+
+
+def test_the_first_day_of_a_plan_that_starts_later_is_planned_first(client, monkeypatch):
+    """Today Monday, the plan starts Wednesday (a study day): Wednesday was the horizon's anchor and was skipped, so
+    Friday got the first units. It is planned now, first, and the work goes on in order."""
+    _approve_starting(client, monkeypatch, "2026-11-25")
+    asyncio.run(planner.ensure_horizon())
+    assert [d["date"] for d in db.q("SELECT date FROM days ORDER BY date")] == ["2026-11-25", "2026-11-27", "2026-11-30"]
+    assert _titles("2026-11-25")[0] == "The real numbers · study"
+
+
+def test_days_planned_around_a_skipped_first_day_are_put_back_in_order(client, monkeypatch):
+    """The state an older version left: the first day missing, the days after it holding the first work."""
+    _approve_starting(client, monkeypatch, "2026-11-25")
+    from datetime import date
+    for table in ("tasks", "blocks", "days"):                               # planned as the older version did:
+        db.ex(f"DELETE FROM {table}")                                       # Friday and Monday, never Wednesday
+    db.kv_set("track_cursor", {})
+    asyncio.run(planner._generate_reference(date(2026, 11, 27)))
+    asyncio.run(planner._generate_reference(date(2026, 11, 30)))
+    assert _titles("2026-11-30")[0] == "The real numbers · study"           # Monday took Wednesday's work
+    asyncio.run(planner.ensure_horizon())
+    assert _titles("2026-11-25")[0] == "The real numbers · study"
+    assert not any(x.startswith("The real numbers") for x in _titles("2026-11-30"))
+
+
+def test_a_plan_that_starts_later_can_start_today(client, monkeypatch):
+    _approve_starting(client, monkeypatch, "2026-11-25")
+    asyncio.run(planner.ensure_horizon())
+    assert client.get("/api/today").json()["exists"] is False               # Monday: before the start
+    r = client.post("/api/plan/start-now", headers=H)
+    assert r.status_code == 200, r.text
+    assert profile.active()["start_date"] == "2026-11-23" and profile.active()["answers"]["start_date"] == "2026-11-23"
+    assert _titles("2026-11-23")[0] == "The real numbers · study"           # the first work comes today
+    assert not any(x.startswith("The real numbers") for x in _titles("2026-11-25"))
+    assert state.get_day("2026-11-23")["status"] == "active"
+    assert "Started early" in planlog.path().read_text()
+    assert client.post("/api/plan/start-now", headers=H).status_code == 409  # it has started
+
+
+def test_starting_today_on_a_day_off_makes_it_a_study_day(client, monkeypatch):
+    _approve_starting(client, monkeypatch, "2026-11-30")
+    set_now("2026-11-28T10:00")                                              # Saturday, the plan starts Monday
+    asyncio.run(planner.ensure_horizon())
+    assert client.post("/api/plan/start-now", headers=H).status_code == 200
+    assert profile.extra_days() == {"2026-11-28": 0} and profile.study_weekdays() == {0, 2, 4}
+    day = state.get_day("2026-11-28")
+    assert day["status"] == "active" and day["blocks"] and _titles("2026-11-28")[0] == "The real numbers · study"
+
+
+def test_home_has_the_week_day_by_day_and_the_exams_ahead(client, monkeypatch):
+    _draft_and_approve(client, monkeypatch)
+    asyncio.run(planner.ensure_horizon())
+    first = db.q1("SELECT MIN(date) AS d FROM tasks")["d"]
+    set_now(first + "T10:00")
+    r = client.put("/api/plan/exams", json={"dates": {"analysis": "2027-01-15"}}, headers=H)
+    assert r.status_code == 200, r.text
+    d = client.get("/api/dashboard", headers=H).json()
+    days = d["week_days"]
+    assert len(days) == 7 and [x["date"] for x in days] == sorted(x["date"] for x in days)
+    mine = next(x for x in days if x["date"] == first)
+    est = db.q1("SELECT SUM(est_min) AS m FROM tasks WHERE date=?", (first,))["m"]
+    assert mine["study"] and mine["planned"] == est
+    assert all(x["planned"] == 0 for x in days if not x["study"])
+    assert sum(x["minutes"] for x in days) == d["week_minutes"]
+    ex = d["exams"]
+    assert ex and ex[0]["key"] == "analysis" and ex[0]["date"] == "2027-01-15" and ex[0]["days"] > 0

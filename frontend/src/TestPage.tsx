@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { CalcTool } from './Calc'
-import { Ban, Check, ChevronLeft, ChevronRight, ClipboardCheck, Flag, RefreshCw, Send, Timer, X } from 'lucide-react'
+import { Ban, Check, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, Flag, RefreshCw, Send, Timer, X } from 'lucide-react'
 import { api, fmtDate, fmtDur, fmtMin, type Test } from './api'
 import type { Ctx } from './App'
-import { PageHead } from './ui'
+import { Empty, PageHead } from './ui'
 import { busyProps, useBusy, useQuestionFocus } from './interact'
 import { highlightC } from './codefmt'
 import { MathText, TexBlock } from './mathtex'
@@ -22,8 +22,12 @@ export function TestsList({ ctx, version }: { ctx: Ctx; version: number }) {
   return (
     <div className="page">
       <PageHead title={tr('Tests')} sub={tr("End-of-day tests and closed-book quizzes. Wrong answers become sticking points and go into the next day's plan")} />
-      <div className="card">
-        {rows.length === 0 && <div className="panel empty">{tr("No tests yet. The end-of-day test is prepared from the test task at the end of the day")}</div>}
+      {rows.length === 0 ? (
+        <Empty icon={<ClipboardList size={20} strokeWidth={1.6} />} title={tr('No tests yet')}
+          action={<button className="btn sm" onClick={() => ctx.go({ kind: 'day', date: ctx.todayDate })}>{tr('Open today')}<ChevronRight size={14} strokeWidth={1.6} /></button>}>
+          {tr("The end-of-day test is prepared from the test task at the end of the day")}
+        </Empty>
+      ) : <div className="card">
         {rows.map((r) => (
           <button key={r.id} className="task-row list-row"
             onClick={() => ctx.go({ kind: 'test', id: r.id })}>
@@ -35,7 +39,7 @@ export function TestsList({ ctx, version }: { ctx: Ctx; version: number }) {
             </span>
           </button>
         ))}
-      </div>
+      </div>}
     </div>
   )
 }

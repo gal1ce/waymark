@@ -17,6 +17,18 @@ export const SOURCE_LABEL: Record<string, string> = live({
 })
 export const BLOCK_LABEL: Record<string, string> = live({ math: 'Math', eng: 'English', c: 'C', kintsugi: 'Kintsugi', test: 'Test' })
 
+/** An empty state: what will be here, and how it gets there. A quiet icon tile, a line, a sentence, maybe one action. */
+export function Empty({ icon, title, children, action }: { icon?: ReactNode; title: ReactNode; children?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="empty-state">
+      {icon && <span className="es-i">{icon}</span>}
+      <div className="es-t">{title}</div>
+      {children && <p className="es-n">{children}</p>}
+      {action && <div className="es-a">{action}</div>}
+    </div>
+  )
+}
+
 export function PageHead({ title, sub, right, children }: { title: ReactNode; sub?: ReactNode; right?: ReactNode; children?: ReactNode }) {
   return (
     <header className="head">
@@ -174,4 +186,18 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): T | null {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
   return v
+}
+
+/** A level-2 section of Today and Home: a rule above, a heading, a quiet note on the right, then its content. */
+export function Sec({ title, meta, action, children, className, id }: { title: ReactNode; meta?: ReactNode; action?: ReactNode; children?: ReactNode; className?: string; id?: string }) {
+  return (
+    <section className={'lv2' + (className ? ' ' + className : '')} id={id} aria-label={typeof title === 'string' ? title : undefined}>
+      <header className="lv2-h">
+        <h2>{title}</h2>
+        {meta != null && <span className="lv2-m">{meta}</span>}
+        {action && <span className="lv2-a">{action}</span>}
+      </header>
+      {children}
+    </section>
+  )
 }

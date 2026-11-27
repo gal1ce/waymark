@@ -15,6 +15,7 @@ import { squareAvatar } from './picture'
 import { t as tr, tx, type Key } from './i18n'
 import { Scrollbar } from './Scrollbar'
 import { Slider } from './controls'
+import { Grid, Group, Row, useSaved } from './settingsui'
 import { NixFly, Topo } from './Scenery'
 
 // ------------------------------------------------------------------ active conversation (per day, per browser)
@@ -350,122 +351,127 @@ function AvatarField({ ctx }: { ctx: Ctx }) {
     inp.click()
   }
   return (
-    <div className="field av-field">
-      <CoachAvatar ctx={ctx} size="big" busy={busy} />
-      <div className="av-b">
-        <span className="field-l">{tr('Picture')}</span>
-        <span className="field-h">{tr('Shown next to {name}\'s replies. Any image; it\'s cut to a circle', { name })}</span>
-        <div className="inline-form">
-          <button type="button" className="btn sm" onClick={choose} disabled={busy}><ImageUp size={14} strokeWidth={1.6} />{has ? tr('Change') : tr('Upload')}</button>
-          {has && <button type="button" className="btn ghost sm" disabled={busy} onClick={async () => { if (await ctx.run(api.coachAvatarDelete())) ctx.refresh() }}>{tr('Remove')}</button>}
-        </div>
-      </div>
-    </div>
+    <Row label={tr('Picture')} hint={tr('Shown next to {name}\'s replies. Any image; it\'s cut to a circle', { name })}>
+      <span className="av-row">
+        <CoachAvatar ctx={ctx} size="big" busy={busy} />
+        <button type="button" className="btn sm" onClick={choose} disabled={busy}><ImageUp size={14} strokeWidth={1.6} />{has ? tr('Change') : tr('Upload')}</button>
+        {has && <button type="button" className="btn ghost sm" disabled={busy} onClick={async () => { if (await ctx.run(api.coachAvatarDelete())) ctx.refresh() }}>{tr('Remove')}</button>}
+      </span>
+    </Row>
   )
 }
 
-export function CoachSettingsView({ ctx }: { ctx: Ctx }) {
+/** The coach's settings, saved the moment they change (a text when you leave the box, the reply length when the
+    slider stops). Shown in Settings → Coach and in the coach panel's own settings. */
+export function CoachSettingsView({ ctx, split }: { ctx: Ctx; split?: boolean }) {
+  type Form = { name: string; personality: string; verbosity: number; effort: Effort; language: ReplyLanguage }
   const [s, setS] = useState<CoachSettings | null>(null)
-  const [form, setForm] = useState<{ name: string; personality: string; verbosity: number; effort: Effort; language: ReplyLanguage }>({ name: '', personality: '', verbosity: 2, effort: 'low', language: 'auto' })
+  const [form, setForm] = useState<Form>({ name: '', personality: '', verbosity: 2, effort: 'low', language: 'auto' })
   const [note, setNote] = useState('')
   const [edit, setEdit] = useState<{ id: number; text: string } | null>(null)
-  const [saved, setSaved] = useState(false)
+  const [saved, markSaved] = useSaved()
+  const timer = useRef<number>(0)
+  const ids = useId()
   const load = useCallback((x: CoachSettings) => { setS(x); setForm({ name: x.name, personality: x.personality, verbosity: x.verbosity, effort: x.effort, language: x.language }) }, [])
   useEffect(() => { api.coach().then(load).catch(() => {}) }, [load])
+  useEffect(() => () => window.clearTimeout(timer.current), [])
   if (!s) return <div className="settings" />
-  const dirty = form.name !== s.name || form.personality !== s.personality || form.verbosity !== s.verbosity || form.effort !== s.effort || form.language !== s.language
-  const save = async () => {
-    const x = await ctx.run(api.saveCoach({ ...form, model: '' }))
-    if (x) { load(x); setSaved(true); setTimeout(() => setSaved(false), 1500); ctx.refresh() }
+  const commit = async (patch: Partial<Form>) => {
+    const next = { ...form, ...patch }
+    setForm(next)
+    if (!next.name.trim()) return
+    const x = await ctx.run(api.saveCoach({ ...next, model: '' }))
+    if (x) { load(x); markSaved(); ctx.refresh() }
+  }
+  const later = (patch: Partial<Form>) => {   // the slider: saved once it stops moving
+    setForm((f) => ({ ...f, ...patch }))
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => commit(patch), 450)
   }
   const memo = async (p: Promise<CoachSettings>) => { const x = await ctx.run(p); if (x) setS(x); return x }
-  return (
-    <div className="settings">
-      <AvatarField ctx={ctx} />
-      <label className="field">
-        <span className="field-l">{tr('Name')}</span>
-        <input className="input" value={form.name} maxLength={32} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-      </label>
-      <div className="field">
-        <span className="field-l">{tr('Reply length')} <span className="t3">· {['', 'terse', 'short', 'moderate', 'detailed', 'thorough'][form.verbosity]}</span></span>
-        <Slider label={tr('Reply length')} min={1} max={5} value={form.verbosity} valueText={['', 'terse', 'short', 'moderate', 'detailed', 'thorough'][form.verbosity]}
-          onChange={(v) => setForm({ ...form, verbosity: v })} />
-        <div className="range-ends t3"><span>{tr('Terse')}</span><span>{tr('Detailed')}</span></div>
-        <div className="field-h">{s.verbosity_labels[String(form.verbosity)]}</div>
-      </div>
-      <div className="field">
-        <span className="field-l">{tr('Reply language')}</span>
-        <div className="seg" role="radiogroup" aria-label={tr('Reply language')}>
-          {(['auto', 'tr', 'en'] as ReplyLanguage[]).map((l) => (
-            <button key={l} type="button" role="radio" aria-checked={form.language === l} className={form.language === l ? 'on' : ''}
-              onClick={() => setForm({ ...form, language: l })}>{{ auto: tr('Auto'), tr: 'Türkçe', en: 'English' }[l]}</button>
-          ))}
-        </div>
-        <div className="field-h">{s.language_labels[form.language]}</div>
-      </div>
-      <div className="field">
-        <span className="field-l">{tr('Thinking')}</span>
-        <div className="seg" role="radiogroup" aria-label={tr('Thinking effort')}>
-          {(['low', 'medium', 'high', 'xhigh', 'max'] as Effort[]).map((e) => (
-            <button key={e} type="button" role="radio" aria-checked={form.effort === e} className={form.effort === e ? 'on' : ''}
-              onClick={() => setForm({ ...form, effort: e })}>{{ low: tr('Fast'), medium: tr('Balanced'), high: tr('Deep'), xhigh: tr('Deeper'), max: tr('Max') }[e]}</button>
-          ))}
-        </div>
-        <div className="field-h">{tx(s.effort_labels[form.effort] ?? '')}</div>
-      </div>
-      <div className="field">
-        <span className="field-l">{tr('Model')}</span>
-        <span className="mono small">{s.provider ? `${s.provider} · ${s.model_active || tr('no model chosen')}` : tr('No AI provider is set up')}</span>
-        <span className="field-h">{tr('Each provider has its own coach model; choose it under AI providers.')}{' '}
-          <a href="#/settings" onClick={(e) => { e.preventDefault(); document.getElementById('set-key')?.scrollIntoView({ block: 'start' }) }}>{tr('AI providers')}</a></span>
-      </div>
-      <label className="field">
-        <span className="field-l">{tr('Personality')}</span>
-        <textarea className="input" rows={4} maxLength={1200} value={form.personality}
-          placeholder={tr('e.g. Dry humour, calls me out when I procrastinate, uses football analogies')}
-          onChange={(e) => setForm({ ...form, personality: e.target.value })} />
-        <span className="field-h">{tr('Tone only. The core rules always win: no code or solutions, the 30-minute hint rule, thresholds')}</span>
-      </label>
-      <div className="inline-form end">
-        {saved && <span className="saved" role="status">{tr('Saved')}</span>}
-        <button className="btn primary sm" disabled={!dirty || !form.name.trim()} onClick={save}>{tr('Save')}</button>
-      </div>
-
-      <div className="field">
-        <span className="field-l">{tr('Memory')} <span className="t3">· {s.memory.length}/50</span></span>
-        <span className="field-h">{tr('Facts and preferences the coach keeps in mind in every conversation. You can also say "remember that…" in chat')}</span>
-        <div className="notes">
-          {s.memory.map((n) => (
-            <div key={n.id} className="note-row">
-              {edit?.id === n.id ? (
-                <form className="note-edit" onSubmit={async (e) => { e.preventDefault(); if (await memo(api.editNote(n.id, edit.text))) setEdit(null) }}>
-                  <textarea className="input" rows={2} autoFocus maxLength={400} value={edit.text} aria-label={tr('Edit note')}
-                    onChange={(e) => setEdit({ ...edit, text: e.target.value })}
-                    onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setEdit(null) } }} />
-                  <div className="inline-form">
-                    <button type="button" className="btn ghost sm" onClick={() => setEdit(null)}>{tr('Cancel')}</button>
-                    <button className="btn sm" disabled={!edit.text.trim()}>{tr('Save')}</button>
-                  </div>
-                </form>
-              ) : (
-                <>
-                  <span className="note-t">{n.text}</span>
-                  <div className="convo-act">
-                    <button className="mini" title={tr('Edit')} aria-label={tr('Edit note')} onClick={() => setEdit({ id: n.id, text: n.text })}><Pencil size={13} strokeWidth={1.5} /></button>
-                    <Confirm label={tr('Delete note')} onYes={() => memo(api.delNote(n.id))} />
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-        <form className="inline-form" onSubmit={async (e) => { e.preventDefault(); if (note.trim() && await memo(api.addNote(note))) setNote('') }}>
-          <input className="input" value={note} maxLength={400} placeholder={tr('Add a note, e.g. I learn faster with diagrams')} onChange={(e) => setNote(e.target.value)} />
+  const length = ['', 'terse', 'short', 'moderate', 'detailed', 'thorough']
+  const nameGroup = (
+      <Group title={tr('Name and picture')} saved={saved}>
+        <AvatarField ctx={ctx} />
+        <Row label={tr('Name')} htmlFor={ids + 'n'}>
+          <input id={ids + 'n'} className="input sr-in" value={form.name} maxLength={32} onChange={(e) => setForm({ ...form, name: e.target.value })}
+            onBlur={() => { if (!form.name.trim()) setForm({ ...form, name: s.name }); else if (form.name !== s.name) commit({}) }}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+        </Row>
+      </Group>
+  )
+  const repliesGroup = (
+      <Group title={tr('How it replies')}>
+        <Row label={<>{tr('Reply length')} <span className="t3">· {tx(length[form.verbosity])}</span></>} hint={s.verbosity_labels[String(form.verbosity)]} stack>
+          <Slider label={tr('Reply length')} min={1} max={5} value={form.verbosity} valueText={length[form.verbosity]} onChange={(v) => later({ verbosity: v })} />
+          <div className="range-ends t3"><span>{tr('Terse')}</span><span>{tr('Detailed')}</span></div>
+        </Row>
+        <Row label={tr('Reply language')} hint={tx(s.language_labels[form.language] ?? '')}>
+          <div className="seg" role="radiogroup" aria-label={tr('Reply language')}>
+            {(['auto', 'tr', 'en'] as ReplyLanguage[]).map((l) => (
+              <button key={l} type="button" role="radio" aria-checked={form.language === l} className={form.language === l ? 'on' : ''}
+                onClick={() => commit({ language: l })}>{{ auto: tr('Auto'), tr: 'Türkçe', en: 'English' }[l]}</button>
+            ))}
+          </div>
+        </Row>
+        <Row label={tr('Thinking')} hint={tx(s.effort_labels[form.effort] ?? '')} stack>
+          <div className="seg" role="radiogroup" aria-label={tr('Thinking effort')}>
+            {(['low', 'medium', 'high', 'xhigh', 'max'] as Effort[]).map((e) => (
+              <button key={e} type="button" role="radio" aria-checked={form.effort === e} className={form.effort === e ? 'on' : ''}
+                onClick={() => commit({ effort: e })}>{{ low: tr('Fast'), medium: tr('Balanced'), high: tr('Deep'), xhigh: tr('Deeper'), max: tr('Max') }[e]}</button>
+            ))}
+          </div>
+        </Row>
+        <Row label={tr('Personality')} htmlFor={ids + 'p'} hint={tr('Tone only. The core rules always win: no code or solutions, the 30-minute hint rule, thresholds')} stack>
+          <textarea id={ids + 'p'} className="input" rows={3} maxLength={1200} value={form.personality}
+            placeholder={tr('e.g. Dry humour, calls me out when I procrastinate, uses football analogies')}
+            onChange={(e) => setForm({ ...form, personality: e.target.value })} onBlur={() => { if (form.personality !== s.personality) commit({}) }} />
+        </Row>
+        <Row label={tr('Model')} hint={tr('Each provider has its own coach model; choose it under AI providers.')}>
+          <span className="sr-v mono">{s.provider ? `${s.provider} · ${s.model_active || tr('no model chosen')}` : tr('No AI provider is set up')}</span>
+          <button type="button" className="btn ghost sm" onClick={() => ctx.go({ kind: 'settings', section: 'ai' })}>{tr('Change')}</button>
+        </Row>
+      </Group>
+  )
+  const memoryGroup = (
+      <Group title={<>{tr('Memory')} <span className="t3 mono sg-count">{s.memory.length}/50</span></>}
+        note={tr('Facts and preferences the coach keeps in mind in every conversation. You can also say "remember that…" in chat')}>
+        {s.memory.length > 0 && (
+          <div className="notes">
+            {s.memory.map((n) => (
+              <div key={n.id} className="note-row">
+                {edit?.id === n.id ? (
+                  <form className="note-edit" onSubmit={async (e) => { e.preventDefault(); if (await memo(api.editNote(n.id, edit.text))) setEdit(null) }}>
+                    <textarea className="input" rows={2} autoFocus maxLength={400} value={edit.text} aria-label={tr('Edit note')}
+                      onChange={(e) => setEdit({ ...edit, text: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setEdit(null) } }} />
+                    <div className="inline-form">
+                      <button type="button" className="btn ghost sm" onClick={() => setEdit(null)}>{tr('Cancel')}</button>
+                      <button className="btn sm" disabled={!edit.text.trim()}>{tr('Save')}</button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <span className="note-t">{n.text}</span>
+                    <div className="convo-act">
+                      <button className="mini" title={tr('Edit')} aria-label={tr('Edit note')} onClick={() => setEdit({ id: n.id, text: n.text })}><Pencil size={13} strokeWidth={1.5} /></button>
+                      <Confirm label={tr('Delete note')} onYes={() => memo(api.delNote(n.id))} />
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <form className="inline-form sg-add" onSubmit={async (e) => { e.preventDefault(); if (note.trim() && await memo(api.addNote(note))) setNote('') }}>
+          <input className="input" value={note} maxLength={400} placeholder={tr('Add a note, e.g. I learn faster with diagrams')} aria-label={tr('New memory note')} onChange={(e) => setNote(e.target.value)} />
           <button className="btn sm" disabled={!note.trim()}><Plus size={14} strokeWidth={1.5} />{tr('Add')}</button>
         </form>
-      </div>
-    </div>
+      </Group>
   )
+  // Settings → Coach: what it says and remembers wide, who it is beside; the coach panel: one under the other
+  if (split) return <Grid>{nameGroup}{repliesGroup}{memoryGroup}</Grid>
+  return <div className="settings">{nameGroup}{repliesGroup}{memoryGroup}</div>
 }
 
 // ------------------------------------------------------------------ suggestions

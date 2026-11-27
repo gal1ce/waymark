@@ -1,0 +1,242 @@
+/* Waymark 2: the quiet desk
+   The app should feel like a clean desk with one thing on it, not like a dashboard. So:
+   - Surfaces are flat. No dot paper, no glow, no contour lines on working pages: the content is the only texture.
+     The sidebar is the darker drawer the app lives in; the page is lighter; cards are only one step above the page.
+   - Two voices. Sans (Geist) is the app talking: titles, labels, figures. Serif (STIX) is what you read and solve:
+     questions, notes, the book, the coach's answers. Mono is only for code.
+   - One accent (picked in Settings), spent on "now": the running task, the current item, the main button.
+   - Chrome lives in the sidebar: pages, recent chats, and at its foot the running task and you (streak, XP,
+     notifications, account). The top bar only says where you are.
+   - Shapes: controls 8, rows 8, cards 12, popovers 12, dialogs 16. Hairlines, not shadows, on dark; a soft
+     shadow under cards on light. */
+
+:root {
+  --display: var(--sans);
+  --figs: var(--sans);
+  --r-key: 5px;
+  --r-row: 8px;
+  --r-ctl: 8px;
+  --r-pop: 12px;
+  --r-card: 12px;
+  --r-dialog: 16px;
+  --r-modal: 16px;
+}
+
+:root, :root[data-theme='light'] {
+  --s-deep: oklch(0.962 0.004 260);
+  --s-page: oklch(0.975 0.007 250);
+  --s-card: oklch(1 0 0);
+  --s-raised: oklch(1 0 0);
+  --s-raised-2: oklch(0.95 0.012 260);
+  --s-side: oklch(0.965 0.004 260);
+  --s-hover: oklch(0.3 0.02 260 / 0.05);
+  --s-on: oklch(0.3 0.02 260 / 0.075);
+  --field: oklch(1 0 0);
+  --line: oklch(0.3 0.02 260 / 0.09);
+  --line-strong: oklch(0.3 0.02 260 / 0.15);
+  --line-hover: oklch(0.3 0.02 260 / 0.26);
+  --line-mark: oklch(0.3 0.02 260 / 0.4);
+  --t1: oklch(0.22 0.012 265);
+  --t2: oklch(0.43 0.012 265);
+  --t3: oklch(0.56 0.01 265);
+  --white: oklch(0.17 0.012 265);
+  --shadow-card: 0 1px 2px oklch(0.3 0.02 260 / 0.04), 0 1px 1px oklch(0.3 0.02 260 / 0.02);
+  --shadow-pop: 0 12px 32px -8px oklch(0.3 0.03 260 / 0.18), 0 0 0 1px oklch(0.3 0.02 260 / 0.06);
+  --shadow-modal: 0 24px 64px -16px oklch(0.3 0.03 260 / 0.28);
+  --lip: transparent;
+}
+:root[data-theme='dark'] {
+  --s-deep: oklch(0.145 0.003 270);
+  --s-page: oklch(0.178 0.003 260);
+  --s-card: oklch(0.198 0.004 270);
+  --s-raised: oklch(0.225 0.005 270);
+  --s-raised-2: oklch(0.26 0.008 270);
+  --s-side: oklch(0.148 0.003 270);
+  --s-hover: oklch(1 0 0 / 0.045);
+  --s-on: oklch(1 0 0 / 0.075);
+  --field: oklch(0.155 0.003 270);
+  --line: oklch(1 0 0 / 0.07);
+  --line-strong: oklch(1 0 0 / 0.11);
+  --line-hover: oklch(1 0 0 / 0.2);
+  --line-mark: oklch(1 0 0 / 0.3);
+  --t1: oklch(0.94 0.003 270);
+  --t2: oklch(0.76 0.005 270);
+  --t3: oklch(0.6 0.006 270);
+  --white: oklch(0.985 0.002 270);
+  --shadow-card: none;
+  --shadow-pop: 0 16px 40px -10px oklch(0 0 0 / 0.6), 0 0 0 1px oklch(1 0 0 / 0.06);
+  --shadow-modal: 0 32px 80px -16px oklch(0 0 0 / 0.7);
+  --lip: transparent;
+}
+
+body { font-size: 14px; line-height: 20px; letter-spacing: -0.003em; }
+.mono { font-family: var(--figs); font-variant-numeric: tabular-nums; }
+::selection { background: var(--accent-soft); }
+
+/* ------------------------------------------------------------ shell */
+.topbar { height: 52px; padding: 0 16px 0 24px; border-bottom: 1px solid transparent; }
+.crumbs { font-size: 13px; gap: 4px; }
+.crumbs button { padding: 3px 6px; }
+.crumbs .here { font-weight: 500; }
+.topbar-r { gap: 6px; }
+.coach-toggle { height: 30px; border-radius: var(--r-ctl); }
+.demo-chip { font-size: 11px; height: 22px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px;
+  background: oklch(from var(--warn) l c h / 0.12); color: var(--warn); border: 0; }
+
+@media (min-width: 861px) {
+  .shell { --rail: 60px; }
+  .shell.nav-wide { --rail: 248px; }
+  .side { background: var(--s-side); border-right: 1px solid var(--line); padding: 0 8px 10px; gap: 1px; }
+  .nav-right .side { border-left: 1px solid var(--line); border-right: 0; }
+  .side-top { height: 52px; margin-bottom: 6px; }
+  .wordmark { font: 600 15px/1 var(--display); letter-spacing: -0.015em; gap: 9px; }
+  .wordmark em { color: inherit; }
+  .brand-mark { width: 22px; height: 22px; }
+  .side-brand { margin-left: 5px; }
+  .side-toggle { width: 30px; height: 30px; top: 11px; border-radius: var(--r-ctl); }
+  .nav { gap: 1px; }
+  .nav-row { height: 34px; gap: 12px; padding: 0 10px; border-radius: var(--r-row); font-size: 13.5px; color: var(--t2); }
+  .nav-row svg { width: 18px; height: 18px; color: var(--t3); }
+  .nav-row:hover svg { color: var(--t1); }
+  .nav-row .coach-av.nav { width: 18px; height: 18px; }
+  .nav-row.on { background: var(--s-on); color: var(--t1); font-weight: 500; }
+  .nav-row.on svg { color: var(--accent-text); }
+  .nav-new { margin-bottom: 10px; color: var(--t1); }
+  .side-recents { margin-top: 20px; }
+  .side-recents-h { padding: 0 10px 6px; font-size: 11.5px; letter-spacing: 0.01em; }
+
+  /* the foot: what's running, then you */
+  .side-foot { margin-top: auto; flex: none; display: flex; flex-direction: column; gap: 8px; padding-top: 10px; }
+  .side-recents + .side-foot { border-top: 1px solid var(--line); }
+  .side-now {
+    display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
+    border-radius: var(--r-ctl); border: 1px solid var(--accent-line); background: var(--accent-soft); color: var(--t1); cursor: pointer; text-align: left;
+    transition: border-color var(--d-hover) var(--ease-out), background-color var(--d-hover) var(--ease-out);
+  }
+  .side-now:hover { border-color: var(--accent-edge); }
+  .side-now-i { display: grid; place-items: center; }
+  .side-now-i .dot { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 0 3px var(--accent-soft); animation: now-pulse 2.4s var(--ease-io) infinite; }
+  @keyframes now-pulse { 50% { box-shadow: 0 0 0 5px oklch(from var(--accent) l c h / 0.06); } }
+  .side-now-b { display: flex; flex-direction: column; min-width: 0; }
+  .side-now-l { font-size: 11px; line-height: 14px; color: var(--accent-text); font-weight: 500; white-space: nowrap; }
+  .side-now-t { font-size: 12.5px; line-height: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .side-now-c { font-size: 12px; color: var(--t2); }
+  /* their popovers open beside the sidebar, from its foot */
+  .side-foot .pop { position: fixed; top: auto; right: auto; bottom: 12px; left: calc(var(--rail) + 8px); transform-origin: bottom left; }
+  .nav-right .side-foot .pop { left: auto; right: calc(var(--rail) + 8px); transform-origin: bottom right; }
+
+  /* collapsed: the foot keeps the dot and the avatar */
+  .shell:not(.nav-wide) .side-now { grid-template-columns: 1fr; padding: 10px 0; justify-items: center; }
+  .shell:not(.nav-wide) .side-now-b, .shell:not(.nav-wide) .side-now-c { display: none; }
+}
+
+/* ------------------------------------------------------------ controls */
+.icon-btn { border-radius: var(--r-ctl); width: 32px; height: 32px; }
+.icon-btn.sm { width: 28px; height: 28px; }
+.btn { height: 34px; padding: 0 14px; border-radius: var(--r-ctl); border-color: var(--line-strong); box-shadow: var(--shadow-card); font-weight: 500; }
+.btn:active:not(:disabled) { transform: scale(0.98); box-shadow: none; }
+.btn.primary, .btn.light { background: var(--accent); box-shadow: 0 1px 2px oklch(0 0 0 / 0.12), inset 0 1px 0 oklch(1 0 0 / 0.1); }
+.btn.primary:hover:not(:disabled), .btn.light:hover:not(:disabled) { background: var(--accent-hi); }
+.btn.primary:active:not(:disabled), .btn.light:active:not(:disabled) { box-shadow: none; }
+.btn.good, .btn.bad { box-shadow: none; }
+.btn.ghost, .btn.outline, .btn.danger { box-shadow: none; }
+.btn.sm { height: 28px; padding: 0 10px; }
+.btn.lg { height: 42px; padding: 0 18px; border-radius: 10px; font-size: 14px; }
+.btn.pill { border-radius: var(--r-ctl); }
+.input { height: 34px; border-radius: var(--r-ctl); }
+.input:focus { border-color: var(--accent-edge); box-shadow: 0 0 0 3px var(--accent-soft); }
+.chip { height: 28px; border-radius: 999px; border-color: var(--line-strong); background: transparent; }
+.seg { border-radius: 10px; padding: 2px; }
+.seg button { height: 28px; border-radius: 8px; }
+.seg button.on { box-shadow: var(--shadow-card), 0 0 0 1px var(--line); }
+.tab { height: 36px; font-size: 13px; }
+.pop { border-radius: var(--r-pop); border-color: var(--line); }
+.running { height: 30px; border-radius: var(--r-ctl); box-shadow: none; }
+.counters { height: 30px; border-radius: var(--r-ctl); box-shadow: none; font-family: var(--figs); }
+.avatar-btn { width: 32px; height: 32px; box-shadow: 0 0 0 1px var(--line-strong); }
+.topbar .icon-btn.bell { width: 32px; height: 32px; }
+
+/* ------------------------------------------------------------ page frame and type */
+.page { padding: 40px clamp(20px, 4cqi, 56px) 96px; gap: 32px; }
+.title { font: 600 28px/34px var(--display); letter-spacing: -0.022em; color: var(--t1); }
+.sub { font-size: 14px; color: var(--t3); margin-top: 6px; }
+.lede { font-family: var(--sans); font-size: 15px; line-height: 23px; }
+.sec-h { font: 600 15px/22px var(--display); letter-spacing: -0.01em; color: var(--t1); }
+.sec-h .meta { font-family: var(--figs); }
+.card { border-radius: var(--r-card); }
+.sec { padding: 20px 22px 22px; }
+.fig-v, .stat-v { font-family: var(--figs); font-weight: 600; letter-spacing: -0.025em; }
+.figures { border-color: var(--line); }
+
+/* the levels (Today, Home): flat and calm */
+.lead { border-radius: 16px; padding: 28px 32px 24px; }
+.lead.on { border-color: oklch(from var(--accent) l c h / 0.3); box-shadow: var(--shadow-card), 0 0 0 4px oklch(from var(--accent) l c h / 0.05); }
+.lead-title { font: 600 30px/36px var(--display); letter-spacing: -0.025em; }
+.lead-timer { font-family: var(--figs); font-weight: 600; font-size: 52px; letter-spacing: -0.035em; }
+.lead-timer.dim { font-size: 34px; }
+.eyebrow { letter-spacing: 0.04em; }
+.lv2-h h2 { font-family: var(--display); }
+.lv-fig { font-family: var(--figs); }
+.tile { border-radius: var(--r-card); }
+
+/* the coach's page keeps its sky but not the contour lines over working space */
+.ask-title, .coach-id .coach-name { letter-spacing: -0.01em; }
+.coach-toggle { font-family: var(--sans); }
+
+/* ------------------------------------------------------------ empty states */
+.empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 56px 24px;
+  border: 1px dashed var(--line-strong); border-radius: var(--r-card); }
+.es-i { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; margin-bottom: 8px;
+  background: var(--s-card); border: 1px solid var(--line); color: var(--t2); box-shadow: var(--shadow-card); }
+.es-t { font-size: 15px; font-weight: 600; color: var(--t1); letter-spacing: -0.01em; }
+.es-n { margin: 0; font-size: 13px; line-height: 20px; color: var(--t3); max-width: 46ch; text-wrap: pretty; }
+.es-a { margin-top: 12px; display: flex; gap: 8px; }
+
+/* ------------------------------------------------------------ the day as a rail: soft blocks, no boxes */
+.drail-track { height: 28px; }
+.drail-seg { height: 28px; border: 0; border-radius: 5px; background: var(--s-hover); color: var(--t3); font-size: 12px; box-shadow: none; }
+.drail-seg:hover { background: var(--s-on); color: var(--t1); }
+.drail-seg.done { background: var(--pos-soft); color: var(--t2); }
+.drail-seg.doing { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); color: var(--accent-text); font-weight: 500; }
+.lead .drail { padding-top: 18px; }
+
+/* ------------------------------------------------------------ calendar: days off are quiet, the plan stands out */
+.cal { border-radius: var(--r-card); }
+.cal-h { background: var(--s-card); font-size: 11.5px; font-weight: 500; padding: 10px 12px; }
+.cal-cell.off { background: repeating-linear-gradient(135deg, transparent 0 9px, var(--line) 9px 10px), var(--s-page); }
+.cal-cell.blank, .cal-cell.before { background: var(--s-page); }
+.cal-cell.active { box-shadow: inset 0 0 0 1.5px var(--accent-edge); background: var(--s-card); }
+.cal-cell.active .cal-n { font-weight: 600; }
+.now-tag { font-size: 11px; font-weight: 500; color: var(--accent-text); }
+.cal-bar { height: 4px; background: var(--s-hover); }
+.cal-legend { gap: 16px; margin-top: -20px; }
+.sw.off { background: repeating-linear-gradient(135deg, transparent 0 2px, var(--line-mark) 2px 3px); box-shadow: inset 0 0 0 1px var(--line); }
+.sw.off::after { display: none; }
+
+/* ------------------------------------------------------------ progress: units as cells, like Home */
+.tracks { padding: 0 22px; }
+.track-row { padding: 18px 0; grid-template-columns: 220px minmax(0, 1fr); }
+.track { gap: 4px; }
+.seg-cell { height: 8px; border-radius: 3px; background: var(--s-hover); box-shadow: inset 0 0 0 1px var(--line); }
+.seg-cell.is-passed, .seg-cell.is-done { background: var(--pos); box-shadow: none; }
+.seg-cell.is-current, .seg-cell.is-doing { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.seg-cell.is-planned { background: var(--s-hover); }
+
+/* the coach's page: the contour map stays, as a whisper */
+.topo { opacity: 0.5; }
+.nix-main:not(.is-empty) .topo { opacity: 0.22; }
+
+/* settings: the same drawer as the app */
+.set-side { background: var(--s-side); padding: 14px 8px; }
+.set-nav a { height: 34px; font-size: 13.5px; border-radius: var(--r-row); }
+.set-nav a[aria-current='page'] { background: var(--s-on); }
+.set-nav a[aria-current='page'] svg { color: var(--accent-text); }
+.set-nav-h { font-size: 11.5px; }
+
+/* the day's two columns follow the page's own width (an open coach panel narrows it), not the window's */
+@container main (max-width: 1000px) {
+  .lv-split { grid-template-columns: minmax(0, 1fr); }
+  .lead-top { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .lead-r { align-items: flex-start; }
+  .lead-note { text-align: left; }
+}

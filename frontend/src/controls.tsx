@@ -69,9 +69,13 @@ export function Checkbox({ checked, onChange, children, disabled, className = ''
   )
 }
 
-export function Switch({ checked, onChange, children, disabled }: { checked: boolean; onChange: (v: boolean) => void; children?: ReactNode; disabled?: boolean }) {
+export function Switch({ checked, onChange, children, disabled, label }: {
+  checked: boolean; onChange: (v: boolean) => void; children?: ReactNode; disabled?: boolean
+  /** the accessible name of a switch without visible text (a settings row names it) */
+  label?: string
+}) {
   return (
-    <button type="button" role="switch" aria-checked={checked} disabled={disabled} className={'swt' + (checked ? ' on' : '')} onClick={() => onChange(!checked)}>
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} className={'swt' + (checked ? ' on' : '')} onClick={() => onChange(!checked)}>
       <span className="swt-track" aria-hidden><span className="swt-knob" /></span>
       {children != null && <span className="swt-l">{children}</span>}
     </button>

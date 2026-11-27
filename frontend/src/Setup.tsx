@@ -85,7 +85,7 @@ export default function Setup({ ctx }: { ctx: Ctx }) {
 // ------------------------------------------------------------- the AI providers
 /** Where the model requests go: providers, their keys (in .env) and models. See AiProviders.tsx. */
 export function KeyCard({ ctx, onSaved }: { ctx: Ctx; compact?: boolean; onSaved?: () => void }) {
-  return <AiProviders ctx={ctx} onSaved={onSaved} />
+  return <AiProviders ctx={ctx} onSaved={onSaved} bare />
 }
 
 // ------------------------------------------------------------- the frame: a sheet of paper over the app
@@ -669,19 +669,22 @@ export function ExamDates({ tracks, start, today, onSave, busy, action, note, en
   const bad = Object.values(v).some((d) => d && d < min)
   return (
     <div className="exam-dates">
-      <p className="set-note">{note}</p>
+      {note && <p className="set-note">{note}</p>}
       {tracks.map((x, i) => (
-        <div key={x.key} className="exam-row">
-          <span className={'trk-dot trk-' + (i % 6)} aria-hidden /><span className="exam-l">{x.label}</span>
-          <DateInput label={t('Exam date for {c}', { c: x.label })} value={v[x.key] ?? ''} min={min} today={today} invalid={!!v[x.key] && v[x.key] < min}
-            onChange={(d) => setV((o) => ({ ...o, [x.key]: d }))} />
-          {v[x.key] ? <button type="button" className="mini" aria-label={t('No exam date')} title={t('No exam date')} onClick={() => setV((o) => ({ ...o, [x.key]: '' }))}><X size={13} strokeWidth={1.6} /></button>
-            : <span className="t3 small">{t('no exam')}</span>}
-          {ends?.[x.key] && <Buffer end={ends[x.key]} exam={x.deadline ?? ''} />}
+        <div key={x.key} className="sr exam-row">
+          <div className="sr-l">
+            <div className="sr-t"><span className={'trk-dot trk-' + (i % 6)} aria-hidden />{x.label}</div>
+            <div className="sr-h">{ends?.[x.key] ? <Buffer end={ends[x.key]} exam={x.deadline ?? ''} /> : !v[x.key] && t('No exam date')}</div>
+          </div>
+          <div className="sr-c">
+            <DateInput label={t('Exam date for {c}', { c: x.label })} value={v[x.key] ?? ''} min={min} today={today} invalid={!!v[x.key] && v[x.key] < min}
+              onChange={(d) => setV((o) => ({ ...o, [x.key]: d }))} />
+            <button type="button" className="icon-btn sm" disabled={!v[x.key]} aria-label={t('No exam date')} title={t('No exam date')} onClick={() => setV((o) => ({ ...o, [x.key]: '' }))}><X size={14} strokeWidth={1.6} /></button>
+          </div>
         </div>
       ))}
       {Object.keys(changed).length > 0 && (
-        <div className="inline-form">
+        <div className="inline-form exam-save">
           <button type="button" className="btn sm primary" {...busyProps(busy)} disabled={busy || bad || undefined} onClick={() => onSave(changed)}>{action}</button>
           {bad && <span className="t3 small">{t('An exam date has to be in the future.')}</span>}
         </div>

@@ -518,14 +518,7 @@ def profile() -> dict:
 
 def _week_minutes() -> int:
     """Planned study minutes in a week of the active plan (breaks left out)."""
-    total = 0
-    for wd in plan.study_weekdays():
-        for b in plan.week(wd):
-            if b["kind"] != "break":
-                h1, m1 = map(int, b["start"].split(":"))
-                h2, m2 = map(int, b["end"].split(":"))
-                total += max(0, h2 * 60 + m2 - h1 * 60 - m1)
-    return total
+    return sum(_block_min(b) for wd in plan.study_weekdays() for b in plan.week(wd) if b["kind"] != "break")
 
 
 def _track_summary() -> list[dict]:
@@ -560,4 +553,46 @@ def dashboard() -> dict:
         "stuck": stuck,
         "last_test": db.q1("SELECT id, date, score, max FROM tests WHERE kind='eod' AND status='submitted' "
                            "ORDER BY date DESC, id DESC LIMIT 1"),
+        "week_days": _week_days(wk_start, minutes),
+        "exams": _upcoming_exams(t),
     }
+
+
+def _week_days(start: date, minutes: dict[str, int]) -> list[dict]:
+    """The seven days of this week: minutes studied and minutes planned (the day's tasks once it is written, the
+    plan's blocks for that weekday before), and whether it is a study day."""
+    est = {r["date"]: r["m"] for r in db.q(
+        "SELECT date, SUM(est_min) AS m FROM tasks WHERE date BETWEEN ? AND ? GROUP BY date",
+        (start.isoformat(), (start + timedelta(days=6)).isoformat()))}
+    out = []
+    for i in range(7):
+        d = start + timedelta(days=i)
+        ds = d.isoformat()
+        study = _is_study(d)
+        if ds in est:
+            planned = int(est[ds] or 0)
+        elif study:
+            planned = sum(_block_min(b) for b in plan.week(d.weekday()) if b["kind"] != "break")
+        else:
+            planned = 0
+        out.append({"date": ds, "minutes": minutes.get(ds, 0), "planned": planned, "study": study})
+    return out
+
+
+def _block_min(b: dict) -> int:
+    h1, m1 = map(int, b["start"].split(":"))
+    h2, m2 = map(int, b["end"].split(":"))
+    return max(0, h2 * 60 + m2 - h1 * 60 - m1)
+
+
+def _upcoming_exams(t: date) -> list[dict]:
+    """Exam dates of the plan's tracks from today on, nearest first."""
+    out = []
+    for tr in plan.tracks():
+        try:
+            d = date.fromisoformat(tr.get("deadline") or "")
+        except ValueError:
+            continue
+        if d >= t:
+            out.append({"key": tr["key"], "label": tr.get("label") or tr["key"], "date": d.isoformat(), "days": (d - t).days})
+    return sorted(out, key=lambda e: e["date"])
