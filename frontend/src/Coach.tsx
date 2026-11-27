@@ -4,15 +4,17 @@ import Markdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkMath from 'remark-math'
 import {
-  ArrowUp, Check, Copy, History, ImageUp, Lock, PanelRightOpen, PenLine, Pencil, Plus, RotateCcw, Settings2, ShieldCheck, Square, Trash2, X,
+  ArrowUp, Brain, CalendarClock, CalendarDays, Check, ChevronRight, CircleAlert, ClipboardList, Copy, FileText, Flag, FolderOpen, Globe, History,
+  ImageUp, Lock, NotebookPen, PanelRightOpen, PenLine, Pencil, Plus, RotateCcw, Settings2, ShieldCheck, Square, StickyNote, Trash2, Wrench, X,
+  type LucideIcon,
 } from 'lucide-react'
-import { api, ApiError, fmtDate, streamChat, type ChatBody, type ChatMsg, type CoachSettings, type Convo, type Effort, type ReplyLanguage, type GenLive, type StreamEv, type Task } from './api'
+import { api, ApiError, fmtDate, streamChat, type ChatBody, type ChatMsg, type ChatResult, type ChatStep, type CoachSettings, type Convo, type Effort, type ReplyLanguage, type GenLive, type StreamEv, type Task } from './api'
 import type { Ctx } from './App'
 import { fixMathInMd, rehypeGluePunct } from './mathtex'
 import { GenLog } from './genlog'
 import { MD_CODE } from './codefmt'
 import { squareAvatar } from './picture'
-import { t as tr, tx, type Key } from './i18n'
+import { t as tr, tx } from './i18n'
 import { Scrollbar } from './Scrollbar'
 import { Slider } from './controls'
 import { Grid, Group, Row, useSaved } from './settingsui'
@@ -90,7 +92,7 @@ function useReducedMotion() {
   return r
 }
 
-export type Draft = { text: string; phase: 'thinking' | 'tool' | 'running' | 'writing'; label?: string; since: number; tests?: { id: number; live: GenLive | null }[] }
+export type Draft = { text: string; phase: 'thinking' | 'tool' | 'running' | 'writing'; label?: string; since: number; tests?: { id: number; live: GenLive | null }[]; steps?: ChatStep[] }
 
 export function Thinking({ phase, label, since, name }: { phase: Draft['phase']; label?: string; since: number; name: string }) {
   const reduce = useReducedMotion()
@@ -141,13 +143,18 @@ const otherKey = (key: string, convo: number | null): string | null => {
 function useTurn(ctx: Ctx, key: string) {
   const t = useSyncExternalStore(subscribe, () => getTurn(key))
   const notify = useRef(ctx.notify); notify.current = ctx.notify
-  const run = useCallback(async (body: ChatBody, pending: ChatMsg | null, onStart?: (convo: number, userId: number) => void): Promise<{ reply: string; convo_id: number } | null> => {
+  const run = useCallback(async (body: ChatBody, pending: ChatMsg | null, onStart?: (convo: number, userId: number) => void): Promise<ChatResult | null> => {
     const ac = new AbortController(); ctls.set(key, ac)
     patchTurn(key, () => ({ draft: { text: '', phase: 'thinking', since: Date.now() }, pending, userId: null }))
     const setDraft = (f: (d: Draft) => Draft) => patchTurn(key, (x) => ({ ...x, draft: x.draft && f(x.draft) }))
     const on = (ev: StreamEv) => {
       if (ev.type === 'start') { patchTurn(key, (x) => ({ ...x, userId: ev.user_id, convo: ev.convo_id })); onStart?.(ev.convo_id, ev.user_id) }
       else if (ev.type === 'status') setDraft((d) => ({ ...d, phase: ev.phase, label: ev.label }))
+      else if (ev.type === 'step') setDraft((d) => {
+        const steps = [...(d.steps ?? [])]
+        steps[ev.i] = { tool: ev.tool, label: ev.label, at: ev.at, state: ev.state }
+        return { ...d, steps }
+      })
       else if (ev.type === 'test') setDraft((d) => ({ ...d, tests: [...(d.tests ?? []).filter((x) => x.id !== ev.id), { id: ev.id, live: ev.live }] }))
       else if (ev.type === 'delta') setDraft((d) => ({ ...d, text: d.text + ev.text, phase: 'writing' }))
       else if (ev.type === 'replace') setDraft((d) => ({ ...d, text: ev.text, phase: 'writing' }))
@@ -187,17 +194,106 @@ function settle(text: string): string {
   return t
 }
 
+// ------------------------------------------------------------------ what the coach did on the way
+const STEP_ICON: Record<string, LucideIcon> = {
+  web_search: Globe, get_day: CalendarDays, get_history: History, read_file: FileText, list_files: FolderOpen,
+  add_stuck_point: Flag, resolve_stuck_point: Check, add_day_note: StickyNote, append_coach_log: NotebookPen,
+  update_future_day: CalendarClock, remember: Brain, create_practice_test: ClipboardList,
+}
+
+/** A step's label in the interface language: the server's fixed labels from the dictionary, the ones with a date,
+ *  a count or a file name by their pattern. */
+function stepLabel(s: string): string {
+  const k = tx(s)
+  if (k !== s) return k
+  let m: RegExpExecArray | null
+  if ((m = /^Looking at (\d{4}-\d\d-\d\d)$/.exec(s))) return tr('Looking at {d}', { d: fmtDate(m[1]) })
+  if ((m = /^Re-planning (\d{4}-\d\d-\d\d)$/.exec(s))) return tr('Re-planning {d}', { d: fmtDate(m[1]) })
+  if ((m = /^Reading the last (\d+) days$/.exec(s))) return tr('Reading the last {n} days', { n: m[1] })
+  if ((m = /^Writing practice test (.+)$/.exec(s))) return tr('Writing practice test {n}', { n: m[1] })
+  if ((m = /^Reading (.+)$/.exec(s))) return tr('Reading {f}', { f: m[1] })
+  if ((m = /^Browsing (.+)$/.exec(s))) return tr('Browsing {f}', { f: m[1] })
+  return s
+}
+
+/** A run of steps between two paragraphs: each one a line with its icon, a spinner while it runs and a tick when it
+ *  is done. Once the reply is finished a run of more than two folds to one line, opened with a click. */
+function Steps({ list, live }: { list: ChatStep[]; live?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const fold = !live && list.length > 2
+  const rows = (
+    <ol className="csteps-l">
+      {list.map((x, i) => {
+        const Icon = STEP_ICON[x.tool] ?? Wrench
+        return (
+          <li key={i} className={'cstep ' + x.state}>
+            <span className="cstep-ic" aria-hidden="true"><Icon size={13} strokeWidth={1.7} /></span>
+            <span className="cstep-t">{stepLabel(x.label)}</span>
+            <span className="cstep-s" aria-hidden="true">
+              {x.state === 'run' ? <span className="cstep-spin" /> : x.state === 'err' ? <CircleAlert size={13} strokeWidth={1.8} /> : <Check size={13} strokeWidth={2} />}
+            </span>
+            <span className="sr-only">{x.state === 'run' ? tr('running') : x.state === 'err' ? tr('failed') : tr('done')}</span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+  if (!fold) return <div className="csteps">{rows}</div>
+  return (
+    <div className={'csteps fold' + (open ? ' open' : '')}>
+      <button type="button" className="csteps-h" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span className="csteps-ics" aria-hidden="true">
+          {[...new Set(list.map((x) => x.tool))].slice(0, 4).map((t) => { const Icon = STEP_ICON[t] ?? Wrench; return <Icon key={t} size={12} strokeWidth={1.7} /> })}
+        </span>
+        <span className="cstep-t">{tr('{n} steps', { n: list.length })}{list.some((x) => x.state === 'err') ? ' · ' + tr('one failed') : ''}</span>
+        <ChevronRight size={13} strokeWidth={1.8} className="csteps-chev" />
+      </button>
+      {open && rows}
+    </div>
+  )
+}
+
+type Part = { kind: 'text'; text: string } | { kind: 'steps'; list: ChatStep[] }
+/** The reply cut where each step happened: the text written before it, the step, the text after. */
+function parts(text: string, steps: ChatStep[] | undefined): Part[] {
+  const out: Part[] = []
+  let pos = 0
+  for (const x of steps ?? []) {
+    const at = Math.max(pos, Math.min(x.at, text.length))
+    const chunk = text.slice(pos, at)
+    if (chunk.trim()) out.push({ kind: 'text', text: chunk })
+    const last = out[out.length - 1]
+    if (last?.kind === 'steps') last.list.push(x)
+    else out.push({ kind: 'steps', list: [x] })
+    pos = at
+  }
+  const rest = text.slice(pos)
+  if (rest.trim()) out.push({ kind: 'text', text: rest })
+  return out
+}
+
+function Reply({ text, steps, ctx, live, onNav }: { text: string; steps?: ChatStep[]; ctx: Ctx; live?: boolean; onNav?: () => void }) {
+  if (!steps?.length) return text ? <div className="md"><CoachMd text={text} ctx={ctx} onNav={onNav} /></div> : null
+  return <>{parts(text, steps).map((p, i) => p.kind === 'text'
+    ? <div key={i} className="md"><CoachMd text={p.text} ctx={ctx} onNav={onNav} /></div>
+    : <Steps key={i} list={p.list} live={live} />)}</>
+}
+
 function DraftView({ draft, name, ctx }: { draft: Draft; name: string; ctx: Ctx }) {
   const shown = settle(draft.text)
+  const running = draft.steps?.some((x) => x.state === 'run')
+  const lastIsStep = !!draft.steps?.length && draft.steps[draft.steps.length - 1].at >= shown.trimEnd().length
   return (
     <div className="msg assistant streaming">
       <CoachAvatar ctx={ctx} size="sm" busy />
       <div className="msg-b">
         {draft.tests?.map((t) => <GenLog key={t.id} id={t.id} init={t.live} compact />)}
-        {shown && <div className="md"><CoachMd text={shown} ctx={ctx} /></div>}
-        {draft.phase !== 'writing' || !shown
-          ? <Thinking phase={draft.phase} label={draft.label} since={draft.since} name={name} />
-          : <span className="caret" aria-hidden="true" />}
+        <Reply text={shown} steps={draft.steps} ctx={ctx} live />
+        {/* a running step is its own indicator; between steps and before the first word the thinking line shows */}
+        {running ? null
+          : draft.phase !== 'writing' || !shown || lastIsStep
+            ? <Thinking phase={draft.phase} label={draft.label} since={draft.since} name={name} />
+            : <span className="caret" aria-hidden="true" />}
       </div>
     </div>
   )
@@ -499,45 +595,47 @@ function suggestions(ctx: Ctx, current: Task | null): Sugg[] {
   return out.slice(0, 5)
 }
 
-const FOLLOW: { label: Key; send: string }[] = [
-  { label: 'Simpler', send: 'Explain that more simply, with an everyday example.' },
-  { label: 'Give an example', send: 'Show me one worked example of that idea (not my exercise), starting with the simplest concrete case.' },
-  { label: 'Quiz me', send: 'Ask me one question to check I understood that.' },
-  { label: 'In Turkish', send: 'Say that again in Turkish, keeping the maths terms in English in brackets.' },
-]
-
 const hello = () => { const h = new Date().getHours(); return tr(h < 5 ? 'Up late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening') }
 
 // ------------------------------------------------------------------ panel
 /** Toggleable right panel: conversations, the streamed thread and the coach's settings. */
 /** The empty box shows what you could ask: one example is typed out, held, then erased for the next, like someone
  *  thinking aloud. The first line is the plain prompt; with reduced motion it simply stays. */
-function useTyping(lines: string[], on: boolean): string {
-  const [text, setText] = useState(lines[0] ?? '')
+function useTyping(lines: string[], on: boolean): { text: string; line: number } {
+  const [st, setSt] = useState({ text: lines[0] ?? '', line: 0 })
   const key = lines.join('\n')
   useEffect(() => {
-    setText(lines[0] ?? '')
+    setSt({ text: lines[0] ?? '', line: 0 })
     if (!on || lines.length < 2) return
     let i = 0, n = lines[0].length, dir = -1, t = 0
     const step = () => {
       if (dir < 0) {
-        if (n > 0) { n--; setText(lines[i].slice(0, n)); t = window.setTimeout(step, 26) }
+        if (n > 0) { n--; setSt({ text: lines[i].slice(0, n), line: i }); t = window.setTimeout(step, 26) }
         else { i = (i + 1) % lines.length; dir = 1; t = window.setTimeout(step, 900) }
       } else if (n < lines[i].length) {
-        n++; setText(lines[i].slice(0, n)); t = window.setTimeout(step, 55 + Math.random() * 70)
+        n++; setSt({ text: lines[i].slice(0, n), line: i }); t = window.setTimeout(step, 55 + Math.random() * 70)
       } else { dir = -1; t = window.setTimeout(step, i === 0 ? 6000 : 4800) }
     }
     t = window.setTimeout(step, 5000)
     return () => window.clearTimeout(t)
   }, [key, on])  // eslint-disable-line react-hooks/exhaustive-deps
-  return text
+  return st
 }
 
 /** The typed-out example, in a component of its own: its many small updates must not re-render the panel, or React
- *  writes the box's value back on every frame and eats a character still being composed (ç, ş, dead keys, an IME). */
-function TypeHint({ lines, on }: { lines: string[]; on: boolean }) {
-  const text = useTyping(lines, on)
-  return <div className="type-hint" aria-hidden="true">{text}<span className="type-caret" /></div>
+ *  writes the box's value back on every frame and eats a character still being composed (ç, ş, dead keys, an IME).
+ *  The example on show (not the plain first line) goes into `take`, so Tab can put it in the box. */
+function TypeHint({ lines, on, take }: { lines: string[]; on: boolean; take: React.MutableRefObject<string> }) {
+  const { text, line } = useTyping(lines, on)
+  const real = line > 0 && text.length > 0
+  useEffect(() => { take.current = real ? lines[line] : '' }, [real, line, lines, take])
+  useEffect(() => () => { take.current = '' }, [take])
+  return (
+    <div className="type-hint" aria-hidden="true">
+      {text}<span className="type-caret" />
+      {real && text === lines[line] && <kbd className="type-tab">Tab</kbd>}
+    </div>
+  )
 }
 
 function examples(name: string, current: Task | null): string[] {
@@ -619,7 +717,7 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
     const r = await run({ text: t, convo_id: fresh ? null : cid, new: fresh }, mine,
       (id, uid) => { got = id; savedId.current = uid; setFresh(false); setCid(id); storeConvo(today, id) })
     // keep the finished reply on screen until the stored thread arrives, so nothing flickers
-    if (r) setMsgs((m) => [...m.filter((x) => x.id !== mine.id), ...(m.some((x) => x.id === savedId.current) ? [] : [mine]), { id: -d.getTime() - 1, ts, role: 'assistant', display: r.reply }])
+    if (r) setMsgs((m) => [...m.filter((x) => x.id !== mine.id), ...(m.some((x) => x.id === savedId.current) ? [] : [mine]), { id: -d.getTime() - 1, ts, role: 'assistant', display: r.reply, steps: r.steps, followups: r.followups }])
     endTurn()
     if (r) { got = r.convo_id; setCid(r.convo_id) }
     reload()
@@ -663,17 +761,35 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
 
   const reduce = useReducedMotion()
   const hints = useMemo(() => examples(name, current), [name, current?.title])  // eslint-disable-line react-hooks/exhaustive-deps
+  const hintNow = useRef('')
+  const empty = shown.length === 0 && !draft
+  // the replies the coach suggested after its last answer (none while it writes, or if it gave none)
+  const followups = lastAsst && !busy && !off ? lastAsst.followups ?? [] : []
+  const fillBox = (t: string) => {
+    setText(t)
+    requestAnimationFrame(() => {
+      const ta = document.querySelector<HTMLTextAreaElement>(page ? '.nix .composer textarea' : '.coach .composer textarea')
+      ta?.focus(); ta?.setSelectionRange(t.length, t.length)
+    })
+  }
   const pick = (x: Sugg) => {
     if (x.send) sendText(x.send)
-    else { setText(x.fill ?? ''); requestAnimationFrame(() => { const ta = document.querySelector<HTMLTextAreaElement>('.composer textarea'); ta?.focus(); ta?.setSelectionRange(ta.value.length, ta.value.length) }) }
+    else fillBox(x.fill ?? '')
   }
   const composer = (
     <form className={'composer' + (page ? ' big' : '')} onSubmit={(e) => { e.preventDefault(); if (busy) stop(); else send() }}>
-      {page && !text && !off && <TypeHint lines={hints} on={!reduce} />}
+      {page && empty && !text && !off && <TypeHint lines={hints} on={!reduce} take={hintNow} />}
       <textarea rows={page ? 2 : 1} value={text} autoFocus={page} aria-label={tr('Ask {name}', { name })}
-        placeholder={!hasKey ? tr('Agent is off') : locked ? tr('Test in progress') : page ? '' : tr('Ask {name} anything…', { name })} disabled={off}
+        placeholder={!hasKey ? tr('Agent is off') : locked ? tr('Test in progress') : page && empty ? '' : tr('Ask {name} anything…', { name })} disabled={off}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }} />
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+          // Tab with an empty box takes what is suggested: the example being typed out, or the coach's first suggestion
+          else if (e.key === 'Tab' && !e.shiftKey && !text && !e.nativeEvent.isComposing) {
+            const take = (page && empty ? hintNow.current : '') || followups[0]
+            if (take) { e.preventDefault(); fillBox(take) }
+          }
+        }} />
       {busy
         ? <button className="btn send" type="submit" aria-label={tr('Stop')} title={tr('Stop')}><Square size={14} strokeWidth={2} /></button>
         : <button className="btn primary send" type="submit" disabled={off || !text.trim()} aria-label={tr('Send')}><ArrowUp size={16} strokeWidth={1.75} /></button>}
@@ -684,7 +800,7 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
     {shown.map((m) => (
       <div key={m.id} className={'msg ' + m.role}>
         {m.role === 'assistant' && <CoachAvatar ctx={ctx} size="sm" />}
-        {m.role === 'assistant' ? <div className="md"><CoachMd text={m.display} ctx={ctx} /></div> : m.display}
+        {m.role === 'assistant' ? <Reply text={m.display} steps={m.steps} ctx={ctx} /> : m.display}
         <div className="msg-foot">
           <time className="ts" dateTime={m.ts} title={`${fmtDate(m.ts.slice(0, 10))} ${m.ts.slice(11, 16)}`}>{m.ts.slice(11, 16)}</time>
           {m.id > 0 && !busy && (
@@ -700,12 +816,17 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
     {draft && <DraftView draft={draft} name={name} ctx={ctx} />}
     <div ref={end} />
   </>
-  const follow = lastAsst && !busy && !off && (
-    <div className="follow" role="group" aria-label={tr('Follow up')}>
-      {FOLLOW.map((f) => <button key={f.label} className="follow-b" onClick={() => sendText(f.send)}>{tr(f.label)}</button>)}
+  // keyed by the reply, so a new set comes in with its own entrance instead of swapping words in place
+  const follow = followups.length > 0 && (
+    <div key={lastAsst?.id} className="follow" role="group" aria-label={tr('Suggested replies')}>
+      {followups.map((f, i) => (
+        <button key={f} className="follow-b" style={{ '--i': i } as React.CSSProperties} onClick={() => sendText(f)}
+          title={i === 0 && !text ? tr('Click to send · Tab puts it in the box') : tr('Click to send')}>
+          <span>{f}</span>{i === 0 && !text && <kbd className="follow-k" aria-hidden="true">Tab</kbd>}
+        </button>
+      ))}
     </div>
   )
-  const empty = shown.length === 0 && !draft
 
   if (page) {
     return (
@@ -799,7 +920,7 @@ export function AskPopup({ at, ctx, page, current, hasKey, exam = false, onClose
 }) {
   const name = ctx.meta?.coach_name || 'Coach'
   const [q, setQ] = useState('')
-  const [ex, setEx] = useState<{ q: string; a: string | null }[]>([])
+  const [ex, setEx] = useState<{ q: string; a: string | null; steps?: ChatStep[] }[]>([])
   const [convo, setConvo] = useState<number | null>(null)
   const popupKey = 'popup' + useId()
   const { draft, run, stop, end: endTurn } = useTurn(ctx, popupKey)
@@ -847,7 +968,7 @@ export function AskPopup({ at, ctx, page, current, hasKey, exam = false, onClose
     const r = await run(exam ? { text, convo_id: convo, new: convo == null, exam } : { text, convo_id: convo ?? storedConvo(ctx.meta?.today) }, null, keep)
     endTurn()
     if (r) {
-      setEx((x) => x.map((e, i) => (i === x.length - 1 ? { ...e, a: r.reply } : e)))
+      setEx((x) => x.map((e, i) => (i === x.length - 1 ? { ...e, a: r.reply, steps: r.steps } : e)))
       keep(r.convo_id)
     } else {  // failed or stopped before a reply: give the question back instead of leaving it unanswered
       setEx((x) => x.slice(0, -1)); setQ(typed)
@@ -886,7 +1007,7 @@ export function AskPopup({ at, ctx, page, current, hasKey, exam = false, onClose
         {ex.map((e, i) => (
           <div key={i} className="ask-ex">
             <div className="msg user">{e.q}</div>
-            {e.a != null && <div className="msg assistant"><div className="md"><CoachMd text={e.a} ctx={ctx} onNav={onClose} /></div></div>}
+            {e.a != null && <div className="msg assistant"><div className="msg-b"><Reply text={e.a} steps={e.steps} ctx={ctx} onNav={onClose} /></div></div>}
           </div>
         ))}
         {draft && <DraftView draft={draft} name={name} ctx={ctx} />}

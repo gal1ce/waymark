@@ -73,7 +73,9 @@ export type Test = {
   answers: Record<string, string>; results: TestResult[]; score: number | null; max: number | null
   time_limit_min: number; remaining_sec?: number; threshold: string; error?: string | null; started_at?: string | null
 }
-export type ChatMsg = { id: number; ts: string; role: 'user' | 'assistant'; display: string }
+/** One thing the coach did while answering; `at` is where in the reply's text it happened. */
+export type ChatStep = { tool: string; label: string; at: number; state: 'run' | 'ok' | 'err' }
+export type ChatMsg = { id: number; ts: string; role: 'user' | 'assistant'; display: string; steps?: ChatStep[]; followups?: string[] }
 export type Convo = { id: number; date: string; title: string; created_at: string; updated_at: string; count: number }
 export type MemoryNote = { id: number; text: string; created_at: string; updated_at: string }
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
@@ -85,7 +87,8 @@ export type StreamEv =
   | { type: 'test'; id: number; live: GenLive | null }
   | { type: 'delta'; text: string }
   | { type: 'replace'; text: string }
-  | { type: 'done'; reply: string; id: number; convo_id: number }
+  | ({ type: 'step'; i: number } & ChatStep)
+  | { type: 'done'; reply: string; id: number; convo_id: number; steps?: ChatStep[]; followups?: string[] }
   | { type: 'error'; message: string }
 /** exam: asked from a graded test that is open; the server answers closed book (rules and formulas, not answers) */
 export type ChatBody = { text: string; convo_id?: number | null; new?: boolean; exam?: boolean }
@@ -469,7 +472,8 @@ export const api = {
 
 /** Streams one coach turn (SSE over POST). Falls back to the plain endpoint if streaming isn't available
  *  before anything arrived. Resolves with the final reply. */
-export async function streamChat(body: ChatBody, on: (ev: StreamEv) => void, signal?: AbortSignal): Promise<{ reply: string; convo_id: number }> {
+export type ChatResult = { reply: string; convo_id: number; steps?: ChatStep[]; followups?: string[] }
+export async function streamChat(body: ChatBody, on: (ev: StreamEv) => void, signal?: AbortSignal): Promise<ChatResult> {
   let got = false
   let r: Response
   try {
@@ -491,7 +495,7 @@ export async function streamChat(body: ChatBody, on: (ev: StreamEv) => void, sig
   }
   const reader = r.body.getReader()
   const dec = new TextDecoder()
-  let buf = '', result: { reply: string; convo_id: number } | null = null, err: string | null = null
+  let buf = '', result: ChatResult | null = null, err: string | null = null
   for (;;) {
     const { value, done } = await reader.read()
     if (done) break
@@ -504,7 +508,7 @@ export async function streamChat(body: ChatBody, on: (ev: StreamEv) => void, sig
         try {
           const ev = JSON.parse(line.slice(5).trim()) as StreamEv
           got = true
-          if (ev.type === 'done') result = { reply: ev.reply, convo_id: ev.convo_id }
+          if (ev.type === 'done') result = { reply: ev.reply, convo_id: ev.convo_id, steps: ev.steps, followups: ev.followups }
           if (ev.type === 'error') err = ev.message
           on(ev)
         } catch { /* partial or bad line */ }

@@ -2452,8 +2452,39 @@ html.theme-fade, html.theme-fade * { transition: background-color 300ms var(--ea
 .av-b { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .coach-av img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
 .follow { display: flex; gap: 6px; padding: 0 12px 2px; overflow-x: auto; scrollbar-width: none; flex: none; }
-.follow-b { flex: none; height: 28px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--s-card); color: var(--t2); font-size: 12px; cursor: pointer; transition: border-color var(--d-hover) var(--ease-out), color var(--d-hover) var(--ease-out); }
+/* the coach's suggested replies arrive after its answer, one after another */
+.follow-b { flex: none; display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--s-card); color: var(--t2); font-size: 12px; cursor: pointer; transition: border-color var(--d-hover) var(--ease-out), color var(--d-hover) var(--ease-out);
+  animation: follow-in 380ms var(--ease-out) both; animation-delay: calc(160ms + var(--i, 0) * 70ms); }
 .follow-b:hover { border-color: var(--accent-line); color: var(--accent-text); }
+.follow-k { font-size: 10px; line-height: 14px; opacity: 0.55; margin-right: -4px; }
+@keyframes follow-in { from { opacity: 0; transform: translateY(calc(var(--rise) * 0.8)) scale(var(--pop-from)); filter: blur(2px); } }
+.type-tab { margin-left: 10px; font-size: 10px; line-height: 15px; vertical-align: 2px; opacity: 0.6; animation: fade 240ms var(--ease-out); }
+
+/* what the coach did on the way: a small timeline between the paragraphs written before and after */
+.csteps { margin: 2px 0 6px; font-size: 12.5px; line-height: 18px; color: var(--t2); }
+.md + .csteps { margin-top: 8px; }
+.csteps-l { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; position: relative; }
+.csteps-l:has(.cstep + .cstep)::before { content: ''; position: absolute; left: 10.5px; top: 12px; bottom: 12px; width: 1px; background: var(--line-strong); }
+.cstep { display: flex; align-items: center; gap: 9px; min-height: 22px; min-width: 0; animation: cstep-row 320ms var(--ease-out) both; }
+.cstep-ic { position: relative; z-index: 1; flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--s-raised); border: 1px solid var(--line-strong); color: var(--t3); transition: color 200ms var(--ease-out), border-color 200ms var(--ease-out); }
+.cstep.run .cstep-ic { color: var(--accent-text); border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+.cstep-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cstep.run .cstep-t { color: transparent; background: linear-gradient(90deg, var(--t2) 0%, var(--t2) 35%, var(--t1) 50%, var(--t2) 65%, var(--t2) 100%);
+  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; animation: shimmer 1.8s linear infinite; }
+.cstep-s { flex: none; display: grid; place-items: center; width: 14px; height: 14px; color: var(--pos); }
+.cstep.ok .cstep-s svg { animation: tick-in 280ms var(--ease-out); }
+.cstep.err .cstep-s { color: var(--warn); }
+.cstep-spin { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--line-strong); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
+.csteps-h { display: inline-flex; align-items: center; gap: 8px; height: 26px; margin-left: -4px; padding: 0 8px 0 4px; border: 0; border-radius: 999px; background: none; color: var(--t2); font: inherit; cursor: pointer; transition: background-color var(--d-hover) var(--ease-out), color var(--d-hover) var(--ease-out); }
+.csteps-h:hover { background: var(--s-hover); color: var(--t1); }
+.csteps-ics { display: inline-flex; gap: 5px; color: var(--t3); }
+.csteps-chev { color: var(--t3); transition: transform var(--d-hover) var(--ease-out); }
+.csteps.open .csteps-chev { transform: rotate(90deg); }
+.csteps.open .csteps-l { margin-top: 6px; }
+@keyframes cstep-row { from { opacity: 0; transform: translateX(calc(var(--slide, 8px) * -0.6)); } }
+@keyframes tick-in { from { opacity: 0; transform: scale(0.4) rotate(-20deg); } }
+@media (prefers-reduced-motion: reduce) { .cstep.run .cstep-t { animation: none; color: var(--t1); background: none; } .cstep-spin { animation-duration: 2.4s; } }
 .coach .rule.short { justify-content: center; text-align: center; }
 
 /* ================================================================= our scrollbar */
