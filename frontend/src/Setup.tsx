@@ -6,7 +6,7 @@ import {
 import { AiProviders } from './AiProviders'
 import { api, type Answers, type DraftPlan, type Onboarding, type PlanTrack, type PlanView } from './api'
 import type { Ctx } from './App'
-import { DateInput, Slider, TimeField } from './controls'
+import { Checkbox, DateInput, Slider, TimeField } from './controls'
 import { addDays, daysBetween, longDate, monthLabel, weekdayMon } from './dates'
 import { dayName, dayShort, getLang, t, type Key } from './i18n'
 import { busyProps, useBusy, useShake } from './interact'
@@ -863,6 +863,8 @@ function Review({ ob, ctx, replacing }: { ob: Onboarding; ctx: Ctx; replacing: s
     if (!change.trim()) return
     act('change', async () => { const r = await ctx.run(api.changeDraft(change.trim())); if (r) { setChange(''); ctx.refresh() } })
   }
+  const setUnit = (track: string, unit: number, on: boolean) =>
+    act('unit', async () => { const r = await ctx.run(api.setDraftUnit(track, unit, on)); if (r) ctx.refresh() })
   const discard = async () => {
     const ok = await ctx.confirm({ title: t('Discard this draft?'), body: t('Your answers stay filled in; the draft is thrown away.'), action: t('Discard'), danger: true })
     if (ok) act('discard', async () => { const r = await ctx.run(api.discardDraft()); if (r) ctx.refresh() })
@@ -928,7 +930,8 @@ function Review({ ob, ctx, replacing }: { ob: Onboarding; ctx: Ctx; replacing: s
       )}
       <WeekGrid p={p} />
       <section className="card sec">
-        <h2 className="sec-h">{t('Tracks')}<span className="meta">{t('{n} units', { n: p.tracks.reduce((s, x) => s + x.units.length, 0) })}</span></h2>
+        <h2 className="sec-h">{t('Tracks')}<span className="meta">{t('{n} units', { n: p.tracks.reduce((s, x) => s + x.units.filter((u) => !u.skip).length, 0) })}</span></h2>
+        <p className="sec-sub">{t('Untick a unit to take it out of the plan. It stays in the list, so you can tick it again; the end date follows.')}</p>
         <div className="draft-tracks">
           {p.tracks.map((tr, ti) => {
             const on = !!open[tr.key]
@@ -936,15 +939,22 @@ function Review({ ob, ctx, replacing }: { ob: Onboarding; ctx: Ctx; replacing: s
               <div key={tr.key} className={'draft-track' + (on ? ' open' : '')}>
                 <button type="button" className="draft-track-h" aria-expanded={on} onClick={() => setOpen((o) => ({ ...o, [tr.key]: !on }))}>
                   {on ? <ChevronDown size={16} strokeWidth={1.6} /> : <ChevronRight size={16} strokeWidth={1.6} />}
-                  <span className={'trk-dot trk-' + (ti % 6)} aria-hidden />{tr.label}<span className="t3 mono">{tr.units.length}</span>
+                  <span className={'trk-dot trk-' + (ti % 6)} aria-hidden />{tr.label}<span className="t3 mono">{tr.units.filter((u) => !u.skip).length}</span>
                 </button>
                 {on && (
                   <div className="draft-track-b">
                     {tr.goal && <p className="set-note">{tr.goal}</p>}
                     <ol className="draft-units">
                       {tr.units.map((u, i) => (
-                        <li key={i}>
-                          <div className="du-h"><span>{u.title}</span><span className="t3 mono">{u.sessions > 1 ? t('{n} sessions', { n: u.sessions }) : t('1 session')}</span></div>
+                        <li key={i} className={u.skip ? 'du-out' : undefined}>
+                          <div className="du-h">
+                            <span className="du-t">{u.title}</span>
+                            <span className="t3 mono">{u.skip ? t('taken out') : u.sessions > 1 ? t('{n} sessions', { n: u.sessions }) : t('1 session')}</span>
+                            <Checkbox className="du-cb" checked={!u.skip} disabled={busy || (!u.skip && tr.units.filter((x) => !x.skip).length <= 1)}
+                              label={u.skip ? t('Put {unit} back into the plan', { unit: u.title }) : t('Take {unit} out of the plan', { unit: u.title })}
+                              title={!u.skip && tr.units.filter((x) => !x.skip).length <= 1 ? t('A course keeps at least one unit') : undefined}
+                              onChange={(on) => setUnit(tr.key, i, on)} />
+                          </div>
                           {u.objective && <div className="du-o">{u.objective}</div>}
                           {u.resources.length > 0 && <div className="du-r">{u.resources.map((r, j) => r.href
                             ? <a key={j} href={r.href} target="_blank" rel="noreferrer"><ExternalLink size={12} strokeWidth={1.6} />{r.label}</a>

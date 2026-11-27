@@ -83,11 +83,12 @@ def _minutes_by_day() -> dict[str, int]:
 
 
 def _is_study(d: date) -> bool:
-    return d.weekday() in study_weekdays()
+    return plan.is_study_day(d)
 
 
 def _streaks(minutes: dict[str, int]) -> tuple[int, int]:
-    """Consecutive study days (Thu/Fri skipped) with at least 30 minutes of tracked work."""
+    """Consecutive study days (days off skipped) with at least 30 minutes of tracked work. A one-off study day added
+    on a day off adds to the streak when it was studied, and never breaks it when it wasn't."""
     t = today()
     d, cur, best, run = start_date(), 0, 0, 0
     while d <= t:
@@ -95,7 +96,7 @@ def _streaks(minutes: dict[str, int]) -> tuple[int, int]:
             if minutes.get(d.isoformat(), 0) >= 30:
                 run += 1
                 best = max(best, run)
-            elif d < t:  # today still counts as open
+            elif d < t and d.weekday() in study_weekdays():  # today still counts as open
                 run = 0
         d += timedelta(days=1)
     cur = run

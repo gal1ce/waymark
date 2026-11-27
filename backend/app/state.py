@@ -50,7 +50,7 @@ def add_stuck(source: str, summary: str, task_id: int | None = None, detail: str
 # ---------------------------------------------------------------- locking
 def day_status(ds: str) -> str:
     d = date.fromisoformat(ds)
-    if d.weekday() not in study_weekdays():
+    if not profile.is_study_day(d):
         return "off"
     t = today()
     if d > t:
@@ -118,6 +118,13 @@ def get_day(ds: str, *, reveal: bool | None = None) -> dict:
     d = date.fromisoformat(ds)
     base = {"date": ds, "status": st, "weekday": WEEKDAY_TR[d.weekday()], "week": week_index(d),
             "exists": bool(day)}
+    like = profile.extra_days().get(ds) if d.weekday() not in study_weekdays() else None
+    if like is not None:
+        # a one-off study day the user added; it can be taken back until it is worked on
+        from .planner import touched
+        base["extra"] = {"like": like, "removable": d >= today() and st != "closed" and not touched(ds)}
+    elif st == "off" and profile.key() == "custom" and d >= today() and d >= start_date():
+        base["can_add"] = sorted(study_weekdays())   # the study weekdays whose blocks it could copy
     if st == "locked" and not reveal:
         # Locked days only show their name; content stays hidden until the day opens.
         from . import tracks
@@ -156,7 +163,7 @@ def overview() -> dict:
             d = start + timedelta(days=i)
             ds = d.isoformat()
             row = next((r for r in rows if r["date"] == ds), None)
-            if d.weekday() not in study_weekdays():
+            if not profile.is_study_day(d):
                 days.append({"date": ds, "short": WEEKDAY_TR_SHORT[i], "status": "off"})
             elif row:
                 days.append({"date": ds, "short": WEEKDAY_TR_SHORT[i], "status": day_status(ds),

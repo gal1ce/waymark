@@ -52,8 +52,10 @@ export default function CalendarView({ month, ctx }: { month?: string; ctx: Ctx 
         {HEAD.map((h) => <div key={h} className={'cal-h' + (offDays.includes(h) ? ' off' : '')}>{dayShort(h)}</div>)}
         {Array.from({ length: lead }, (_, i) => <div key={'x' + i} className="cal-cell blank" />)}
         {cal?.days.map((d) => {
-          const can = d.status === 'active' || d.status === 'closed' || d.status === 'past' || (d.status === 'locked' && canPeek(ctx.meta?.plan?.key, ctx.todayDate, d.date))
-          const tip = `${d.date} · ${tx(STATUS[d.status])}` + (cal?.exams?.[d.date] ? ` · ${tr('{c} exam', { c: cal.exams[d.date] })}` : '') + (cal?.deadline === d.date ? ` · ${tr('deadline')}` : '') + (cal?.end === d.date ? ` · ${tr('last unit (projected)')}` : '')
+          // a day off from today on opens too (a plan of the user's own): study can be added on it there
+          const addable = d.status === 'off' && ctx.meta?.plan?.key === 'custom' && d.date >= ctx.todayDate && (!ctx.ov || d.date >= ctx.ov.start_date)
+          const can = addable || d.status === 'active' || d.status === 'closed' || d.status === 'past' || (d.status === 'locked' && canPeek(ctx.meta?.plan?.key, ctx.todayDate, d.date))
+          const tip = `${d.date} · ${tx(STATUS[d.status])}` + (addable ? ` · ${tr('open it to add study on this day')}` : '') + (cal?.exams?.[d.date] ? ` · ${tr('{c} exam', { c: cal.exams[d.date] })}` : '') + (cal?.deadline === d.date ? ` · ${tr('deadline')}` : '') + (cal?.end === d.date ? ` · ${tr('last unit (projected)')}` : '')
           const body = (
             <>
               <div className="cal-top">

@@ -195,6 +195,40 @@ const TR = {
   'now: {unit}': 'şu an: {unit}', 'Download PLAN.md': 'PLAN.md indir', 'Change the plan…': 'Planı değiştir…', 'units passed': 'geçilen ünite',
   'The plan starts {day} {date}.': 'Plan {date} {day} başlıyor.', 'Days stay locked until then': 'O zamana kadar günler kilitli', 'A day off.': 'Tatil günü.',
 
+  // units taken out of a plan (Setup review, Settings → Plan, Progress)
+  'Untick a unit to take it out of the plan. It stays in the list, so you can tick it again; the end date follows.':
+    'Bir üniteyi plandan çıkarmak için işaretini kaldır. Listede kalır, yeniden işaretleyebilirsin; bitiş tarihi de buna göre değişir.',
+  'taken out': 'çıkarıldı', 'Put {unit} back into the plan': '{unit} ünitesini plana geri ekle', 'Take {unit} out of the plan': '{unit} ünitesini plandan çıkar',
+  'A course keeps at least one unit': 'Her derste en az bir ünite kalır', 'Units in the plan': 'Plandaki üniteler',
+  'Untick a unit to take it out of the plan. Days you have started keep their tasks; the days not started yet are planned again without it. Tick it again to put it back.':
+    'Bir üniteyi plandan çıkarmak için işaretini kaldır. Başladığın günler görevlerini korur; henüz başlanmamış günler o ünite olmadan yeniden planlanır. Geri eklemek için yeniden işaretle.',
+  'Unit put back into the plan': 'Ünite plana geri eklendi', 'Unit taken out of the plan': 'Ünite plandan çıkarıldı',
+  'The days not started yet were planned again.': 'Henüz başlanmamış günler yeniden planlandı.',
+  '{a} of {b} units': '{b} üniteden {a}', 'Passed: it stays in the plan': 'Geçildi: planda kalır',
+  // a study day on a day off (Day, Calendar)
+  'Study added on {day}': '{day} günü çalışma eklendi',
+  'The days planned after it were planned again: their work moved up.': 'Ondan sonraki planlı günler yeniden planlandı: işleri öne kaydı.',
+  'a day off': 'tatil günü',
+  'Want to study anyway? Add study for this date only. It uses the blocks of one of your study days and goes on with the next work in your plan, so the days after it move up. Your weekly study days stay the same.':
+    'Yine de çalışmak mı istiyorsun? Yalnızca bu tarih için çalışma ekle. Çalışma günlerinden birinin bloklarını kullanır ve planındaki sıradaki işle devam eder; sonraki günler öne kayar. Haftalık çalışma günlerin aynı kalır.',
+  "Which day's blocks to use": 'Hangi günün blokları kullanılsın', 'The blocks of {day}': '{day} blokları',
+  'Study on this day': 'Bu gün çalış', 'Take this study day back?': 'Bu çalışma günü geri alınsın mı?', 'Take it back': 'Geri al',
+  '{day} goes back to being a day off. Its work returns to the days after it.': '{day} yeniden tatil günü olur. İşleri sonraki günlere geri döner.',
+  'Study day taken back': 'Çalışma günü geri alındı', 'A study day you added.': 'Senin eklediğin bir çalışma günü.',
+  '{day} is normally a day off; this date uses the blocks of {like}.': '{day} normalde tatil günü; bu tarih {like} bloklarını kullanıyor.',
+  'No study: open it to add study on this day': 'Çalışma yok: bu güne çalışma eklemek için aç', 'open it to add study on this day': 'bu güne çalışma eklemek için aç',
+  // what the server says about these (backend/app/onboarding.py, planner.py), shown through tx()
+  'A course keeps at least one unit. To drop the whole course, ask for a change to the plan.': 'Her derste en az bir ünite kalır. Dersi tümden çıkarmak için plandan değişiklik iste.',
+  'That unit is passed already; it stays in the plan.': 'Bu ünite zaten geçildi; planda kalır.',
+  'Taking units out is for a plan of your own.': 'Ünite çıkarmak yalnızca kendi planında olur.',
+  'There is no finished draft to change.': 'Değiştirilecek bitmiş bir taslak yok.', 'No such unit in that course.': 'O derste böyle bir ünite yok.',
+  'Studying on a day off is for a plan of your own.': 'Tatil gününde çalışmak yalnızca kendi planında olur.',
+  'That day is over.': 'O gün geçti.', 'That day is before the plan starts.': 'O gün plan başlamadan önce.',
+  'That day is too far ahead; add it closer to the date.': 'O gün çok ileride; tarihe yaklaşınca ekle.',
+  'That is a study day already.': 'O gün zaten çalışma günü.', "Pick one of the plan's study days to copy.": 'Kopyalamak için planın çalışma günlerinden birini seç.',
+  "That isn't a study day you added.": 'Bu senin eklediğin bir çalışma günü değil.', 'That day is over; it stays as it was.': 'O gün geçti; olduğu gibi kalır.',
+  'You already worked on that day; it stays.': 'O günde zaten çalıştın; kalır.', 'Not a date.': 'Geçerli bir tarih değil.',
+
   // plan setup, step by step; the app's own controls
   "Each day from {a} to {b}": "Her gün {a} ile {b} arası",
   "A day": "Günde",

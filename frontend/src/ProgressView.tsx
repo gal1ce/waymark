@@ -8,7 +8,7 @@ type Pt = { date: string; label: string; v: number; max: number }
 
 // shown through tx(), in the interface language
 const TRACK: Record<TrackStatus, string> = {
-  passed: 'passed', done: 'done', current: 'now', doing: 'in progress', tried: 'tried, below threshold', planned: 'planned', todo: 'up next',
+  passed: 'passed', done: 'done', current: 'now', doing: 'in progress', tried: 'tried, below threshold', planned: 'planned', todo: 'up next', removed: 'taken out',
 }
 
 export default function ProgressView({ ctx }: { ctx: Ctx }) {

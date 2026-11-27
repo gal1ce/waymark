@@ -8,6 +8,7 @@ import re
 import secrets
 import subprocess
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -880,6 +881,40 @@ async def plan_exams(body: ExamsIn):
     return out
 
 
+class UnitIn(BaseModel):
+    track: str
+    unit: int
+    on: bool
+
+
+@app.put("/api/plan/unit")
+async def plan_unit(body: UnitIn):
+    """A unit taken out of the approved plan (on=false) or put back; the days not started yet are planned again."""
+    return await planner.set_unit(body.track, body.unit, body.on)
+
+
+class ExtraDayIn(BaseModel):
+    like: int | None = None
+
+
+def _day(ds: str) -> str:
+    try:
+        return date.fromisoformat(ds).isoformat()
+    except ValueError:
+        raise state.Refused("Not a date.") from None
+
+
+@app.post("/api/day/{ds}/extra")
+async def extra_day_add(ds: str, body: ExtraDayIn):
+    """Study on a day the plan has off (that date only), with the blocks of one of the plan's study weekdays."""
+    return await planner.add_extra_day(_day(ds), body.like)
+
+
+@app.delete("/api/day/{ds}/extra")
+async def extra_day_remove(ds: str):
+    return await planner.remove_extra_day(_day(ds))
+
+
 @app.get("/api/plan/file")
 def plan_file():
     p = planlog.write()
@@ -917,6 +952,12 @@ async def onboarding_change(body: ChangeIn):
     out = onboarding.start({}, change=body.change)
     spawn(onboarding.run(), "onboarding")
     return out
+
+
+@app.put("/api/onboarding/unit")
+def onboarding_unit(body: UnitIn):
+    """A unit taken out of the draft under review (on=false) or put back."""
+    return onboarding.set_draft_unit(body.track, body.unit, body.on)
 
 
 @app.post("/api/onboarding/discard")

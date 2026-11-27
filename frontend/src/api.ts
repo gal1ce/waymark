@@ -27,6 +27,10 @@ export type Day = {
   now?: string; current?: Task | null
   /** a locked day of a custom plan: what each block will work on (no task texts; can still change) */
   outline?: OutlineBlock[] | null
+  /** a one-off study day the user added on a day off: the study weekday (0 = Monday) whose blocks it copies */
+  extra?: { like: number; removable: boolean }
+  /** a day off of a custom plan that can still take study: the study weekdays whose blocks it could copy */
+  can_add?: number[]
 }
 export type OutlineBlock = { start: string; end: string; kind: string; track: string; unit: string | null
   session?: number; sessions?: number; check: boolean; review: boolean }
@@ -102,7 +106,7 @@ export type CalDay = {
 }
 /** deadline: the day the user has to be ready by; end: the day the last unit is projected to end (custom plans) */
 export type Calendar = { month: string; today: string; start: string; days: CalDay[]; deadline?: string | null; end?: string | null; exams?: Record<string, string> }
-export type TrackStatus = 'passed' | 'current' | 'tried' | 'todo' | 'done' | 'doing' | 'planned'
+export type TrackStatus = 'passed' | 'current' | 'tried' | 'todo' | 'done' | 'doing' | 'planned' | 'removed'
 export type KhanUnit = { idx: number; name: string; status: TrackStatus; best: number | null; tries: number }
 export type Score = { id: number; ts: string; date: string; kind: string; item: string; value: number; max: number; threshold: number | null; passed: number | null }
 export type ThresholdRow = { key: string; label: string; threshold: number; max: number; unit: string; count: number; last: number | null; passed: number; failed: number; note?: string }
@@ -124,7 +128,7 @@ export type TopicRow = {
   miss: { date: string; test_id: number; prompt: string; given: string; answer: string } | null
   notes: { id: number; title: string }[]
 }
-export type PlanProgress = { key: string; label: string; units: { idx: number; name: string; status: TrackStatus; best: number | null; max: number | null }[] }
+export type PlanProgress = { key: string; label: string; units: { idx: number; name: string; status: TrackStatus; removed?: boolean; best: number | null; max: number | null }[] }
 export type HistItem = {
   ts: string; date: string; kind: 'commit' | 'done' | 'compile' | 'score' | 'test_submitted' | 'day_closed' | 'stuck'; title: string
   hash?: string; files?: number; add?: number; del?: number; spent_min?: number; unit?: string; percent?: number; passed?: boolean
@@ -150,7 +154,8 @@ export type Goal = { label: string; target: string; note: string }
 
 // A plan of the user's own (onboarding): the answers, the model's checked draft, the approved plan
 export type PlanBlock = { start: string; end: string; kind: string; title: string }
-export type PlanUnit = { title: string; objective: string; practice: string; sessions: number; resources: { label: string; href: string }[] }
+/** skip: taken out of the plan by the user (kept in the list, so it can be put back) */
+export type PlanUnit = { title: string; objective: string; practice: string; sessions: number; resources: { label: string; href: string }[]; skip?: boolean }
 export type PlanTrack = { key: string; label: string; goal: string; units: PlanUnit[]; deadline?: string }
 export type Milestone = { label?: string; start: string; end: string; items: string[]; current?: boolean }
 export type DraftPlan = {
@@ -352,6 +357,10 @@ export const api = {
   onboarding: () => req<Onboarding>('GET', '/onboarding'),
   draftPlan: (answers: Answers) => req<Onboarding>('POST', '/onboarding/draft', { answers }),
   setExams: (dates: Record<string, string>) => req<{ notes: string[]; changed: string[] }>('PUT', '/plan/exams', { dates }),
+  setDraftUnit: (track: string, unit: number, on: boolean) => req<Onboarding>('PUT', '/onboarding/unit', { track, unit, on }),
+  setPlanUnit: (track: string, unit: number, on: boolean) => req<{ changed: boolean; replanned: string[] }>('PUT', '/plan/unit', { track, unit, on }),
+  addExtraDay: (ds: string, like: number) => req<{ date: string; like: number; replanned: string[] }>('POST', `/day/${ds}/extra`, { like }),
+  removeExtraDay: (ds: string) => req<{ date: string; replanned: string[] }>('DELETE', `/day/${ds}/extra`),
   changeDraft: (change: string) => req<Onboarding>('POST', '/onboarding/change', { change }),
   discardDraft: () => req<Onboarding>('POST', '/onboarding/discard'),
   approvePlan: () => req<Onboarding>('POST', '/onboarding/approve', { confirm: true }),

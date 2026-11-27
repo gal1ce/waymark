@@ -4,7 +4,11 @@ track works on the track's next unit: study it, then work problems; the last ses
 closed-book unit check, and a unit whose check is below the pass mark is studied again and retaken before the track
 moves on. With an API key the model then shapes the day from the user's results, inside the same rules.
 
-The cursor (kv 'track_cursor') says where each track is: {track key: {"unit": i, "session": s}}."""
+The cursor (kv 'track_cursor') says where each track is: {track key: {"unit": i, "session": s}}. A unit the user took
+out of the plan ("skip": true on the unit) is stepped over wherever the cursor walks; it keeps its place in the list,
+so unit numbers, scores and the tasks already done stay as they were and putting it back is one flag. "done" on a
+position lists units after it that were worked through already (a unit put back behind the cursor is studied next,
+then the track goes on past them)."""
 from __future__ import annotations
 
 import json
@@ -56,11 +60,42 @@ def exam_dates(tracks_: list[dict]) -> dict[str, date]:
     return out
 
 
+def removed(unit: dict | None) -> bool:
+    """True for a unit the user took out of the plan."""
+    return bool((unit or {}).get("skip"))
+
+
+def is_removed(tr: dict | None, idx) -> bool:
+    units = (tr or {}).get("units") or []
+    return isinstance(idx, int) and 0 <= idx < len(units) and removed(units[idx])
+
+
+def settle(units: list[dict], pos: dict) -> dict:
+    """Moves a position past the units the user took out and the ones listed as already done. Changes pos."""
+    done = pos.get("done") or []
+    while pos["unit"] < len(units) and (removed(units[pos["unit"]]) or pos["unit"] in done):
+        pos["unit"], pos["session"] = pos["unit"] + 1, 0
+    if "done" in pos:
+        rest = [i for i in done if i > pos["unit"]]
+        if rest:
+            pos["done"] = rest
+        else:
+            pos.pop("done")
+    return pos
+
+
+def ahead(units: list[dict], pos: dict) -> list[int]:
+    """The units still to study from a (settled) position, in order."""
+    done = pos.get("done") or []
+    return [i for i in range(pos["unit"], len(units)) if not removed(units[i]) and i not in done]
+
+
 def sessions_left(tracks_: list[dict], cur: dict) -> dict[str, int]:
     out = {}
     for tr in tracks_:
-        pos, units = cur.get(tr["key"]) or {"unit": 0, "session": 0}, tr.get("units") or []
-        out[tr["key"]] = max(0, sum(_sessions(u) for u in units[pos["unit"]:]) - (pos["session"] if pos["unit"] < len(units) else 0))
+        units = tr.get("units") or []
+        pos = settle(units, dict(cur.get(tr["key"]) or {"unit": 0, "session": 0}))
+        out[tr["key"]] = max(0, sum(_sessions(units[i]) for i in ahead(units, pos)) - (pos["session"] if pos["unit"] < len(units) else 0))
     return out
 
 
@@ -100,7 +135,7 @@ def _moved(b: dict, tr: dict) -> dict:
 
 def day_blocks(d: date, cur: dict | None = None) -> list[dict]:
     """The approved schedule's blocks for day d, after the exam dates had their say (see remap)."""
-    blocks = profile.week(d.weekday())
+    blocks = profile.day_week(d)
     if profile.key() != "custom":
         return blocks
     trs = profile.tracks()
@@ -171,6 +206,8 @@ def _keep_sources(got: list[dict], unit: dict | None) -> list[dict]:
 def _failed_unit(tr: dict, upto: int) -> int | None:
     """The last unit before `upto` whose newest unit check is below the pass mark and has no retake planned yet."""
     for idx in range(upto - 1, -1, -1):
+        if is_removed(tr, idx):
+            continue   # taken out of the plan: no retake
         last = db.q1("SELECT passed FROM scores WHERE kind='unit_quiz' AND item=? ORDER BY id DESC LIMIT 1",
                      (item(tr, idx),))
         if last is None:
@@ -206,6 +243,7 @@ def _quiz_task(tr: dict, idx: int, retake: bool = False) -> dict:
 
 def _block_tasks(tr: dict, minutes: int, pos: dict) -> list[dict]:
     units = tr.get("units") or []
+    settle(units, pos)
     tasks: list[dict] = []
     left = minutes
     failed = _failed_unit(tr, pos["unit"]) if pos.get("retake_checked") is None else None
@@ -216,17 +254,18 @@ def _block_tasks(tr: dict, minutes: int, pos: dict) -> list[dict]:
         if left < 30:
             return tasks
     if pos["unit"] >= len(units):
-        if not units:
+        kept = [i for i, u in enumerate(units) if not removed(u)]
+        if not kept:
             return tasks
         n = pos.get("review", 0)
-        unit = units[n % len(units)]
+        unit = units[kept[n % len(kept)]]
         tasks.append(T(f"{unit['title']} · review", "review", left,
                        (f"Every unit of this track is done; these blocks are review until its exam on {tr['deadline']}. "
                         "Redo the hardest problems of this unit from memory under exam conditions, then check them "
                         "against the source, and clear its open sticking points." if tr.get("deadline") else
                         "This track has no new units left. Redo the hardest problems of this unit from memory, then "
                         "check them against the source. Ask the coach to add the next units to the plan."),
-                       _resources(unit), meta={"track": tr["key"], "unit": n % len(units), "track_review": n + 1,
+                       _resources(unit), meta={"track": tr["key"], "unit": kept[n % len(kept)], "track_review": n + 1,
                              **({"exam": tr["deadline"]} if tr.get("deadline") else {})}))
         pos["review"] = n + 1
         return tasks
@@ -252,6 +291,7 @@ def _block_tasks(tr: dict, minutes: int, pos: dict) -> list[dict]:
     if last:
         tasks.append(_quiz_task(tr, pos["unit"]))
         pos["unit"], pos["session"] = pos["unit"] + 1, 0
+        settle(units, pos)
     else:
         pos["session"] = s + 1
     return tasks
@@ -279,7 +319,7 @@ def template_day(d: date, cur: dict | None = None) -> dict:
         plan[key] = _block_tasks(tr, _minutes(b), cur[tr["key"]])
         for t in plan[key]:
             t["meta"] |= _moved(b, tr)
-    for b, key in slots(profile.week(d.weekday())):
+    for b, key in slots(profile.day_week(d)):
         if b["kind"] == "test":
             plan[key] = _end_tasks(_minutes(b))
     return plan
@@ -292,6 +332,7 @@ def advance(d: date, plan: dict) -> None:
     for _b, key, tr in track_slots(d):
         pos = cur[tr["key"]]
         units = tr.get("units") or []
+        settle(units, pos)
         tasks = [t for t in plan.get(key, []) if (t.get("meta") or {}).get("track") == tr["key"]]
         for t in tasks:
             if t["meta"].get("track_review"):
@@ -305,6 +346,7 @@ def advance(d: date, plan: dict) -> None:
             pos["session"] += 1
             if pos["session"] >= _sessions(units[pos["unit"]]):   # the check was left out: the unit still ends
                 pos["unit"], pos["session"] = pos["unit"] + 1, 0
+        settle(units, pos)
     db.kv_set("track_cursor", cur)
 
 
@@ -316,13 +358,7 @@ def finish(week: list[list[dict]], tracks_: list[dict], start: date, cur: dict |
     one session per block of a track (as advance() moves the cursor). Assumes every unit check passes the first time;
     a retake moves the day later. None when a track with units left never gets a block."""
     cur = {k: dict(v) for k, v in (cur or {}).items()}
-    left = {}
-    for tr in tracks_:
-        pos = cur.setdefault(tr["key"], {"unit": 0, "session": 0})
-        units = tr.get("units") or []
-        n = sum(_sessions(u) for u in units[pos["unit"]:]) - (pos["session"] if pos["unit"] < len(units) else 0)
-        if n > 0:
-            left[tr["key"]] = n
+    left = {k: n for k, n in sessions_left(tracks_, cur).items() if n > 0}
     if not left:
         return None
     per_week = {k: sum(1 for day in week for b in day if b.get("kind") == k) for k in left}
@@ -348,8 +384,9 @@ def unit_ends(week: list[list[dict]], tracks_: list[dict], start: date, cur: dic
     cur = cur or {}
     queue = {}
     for tr in tracks_:
-        pos = cur.get(tr["key"]) or {"unit": 0, "session": 0}
-        q = [(tr["label"], u["title"], _sessions(u)) for u in (tr.get("units") or [])[pos["unit"]:]]
+        units = tr.get("units") or []
+        pos = settle(units, dict(cur.get(tr["key"]) or {"unit": 0, "session": 0}))
+        q = [(tr["label"], units[i]["title"], _sessions(units[i])) for i in ahead(units, pos)]
         if q and pos.get("session"):
             q[0] = (q[0][0], q[0][1], max(1, q[0][2] - pos["session"]))
         queue[tr["key"]] = q
@@ -395,7 +432,8 @@ def _planned_ends() -> dict[str, str]:
     """For a track whose units are all planned already: the last planned day of its units."""
     out = {}
     for tr in profile.tracks():
-        n = len(tr.get("units") or [])
+        kept = [i for i, u in enumerate(tr.get("units") or []) if not removed(u)]
+        n = (kept[-1] + 1) if kept else 0
         row = db.q1("SELECT MAX(date) AS d FROM tasks WHERE json_extract(meta, '$.track')=? AND kind IN ('read','practice','unit_quiz') "
                     "AND json_extract(meta, '$.track_review') IS NULL AND json_extract(meta, '$.unit')=?", (tr["key"], n - 1))
         if row and row["d"]:
@@ -434,7 +472,7 @@ def outline(d: date) -> list[dict] | None:
     cur = {k: dict(v) for k, v in cursor().items()}
     while True:
         here = []
-        for b in remap(profile.week(day.weekday()), day, profile.tracks(), sessions_left(profile.tracks(), cur)):
+        for b in remap(profile.day_week(day), day, profile.tracks(), sessions_left(profile.tracks(), cur)):
             tr = profile.track(b["kind"])
             if not tr:
                 if b["kind"] == "test" and day == d:
@@ -442,6 +480,7 @@ def outline(d: date) -> list[dict] | None:
                                  "unit": None, "check": False, "review": False})
                 continue
             pos, units = cur[tr["key"]], tr.get("units") or []
+            settle(units, pos)
             item = {"start": b["start"], "end": b["end"], "kind": tr["key"], "track": tr["label"], "unit": None,
                     "check": False, "review": pos["unit"] >= len(units)}
             if pos["unit"] < len(units):
@@ -464,8 +503,28 @@ def rewind(dropped: list[dict]) -> None:
         m = json.loads(t["meta"]) if isinstance(t["meta"], str) else t["meta"]
         k, u = m.get("track"), m.get("unit")
         if k in cur and isinstance(u, int) and t["kind"] in ("read", "unit_quiz") and u < cur[k]["unit"] + 1:
-            if (u, m.get("session", 0)) < (cur[k]["unit"], cur[k]["session"]):
-                cur[k] = {**cur[k], "unit": u, "session": int(m.get("session", 0))}
+            s = int(m.get("session", 0))
+            if t["kind"] == "unit_quiz":
+                if m.get("item") and db.q1("SELECT 1 FROM scores WHERE kind='unit_quiz' AND item=? LIMIT 1", (m["item"],)):
+                    continue   # a retake: it comes back by itself while the check stays below the mark
+                tr = profile.track(k)
+                units = (tr or {}).get("units") or []
+                s = _sessions(units[u]) - 1 if u < len(units) else 0   # the check belongs to the unit's last session
+            if (u, s) < (cur[k]["unit"], cur[k]["session"]):
+                cur[k] = {**cur[k], "unit": u, "session": s}
+    db.kv_set("track_cursor", cur)
+
+
+def put_back(tr: dict, idx: int) -> None:
+    """A unit put back into the plan after the cursor went past it: it is studied next, then the track goes on where it
+    was; the units already worked through in between are not studied again."""
+    cur = cursor()
+    pos, units = cur[tr["key"]], tr.get("units") or []
+    if idx >= pos["unit"]:
+        return
+    done = sorted(set(pos.get("done") or []) | {j for j in range(idx + 1, pos["unit"]) if not removed(units[j])})
+    cur[tr["key"]] = {**{k: v for k, v in pos.items() if k != "done"}, "unit": idx, "session": 0,
+                      **({"done": done} if done else {})}
     db.kv_set("track_cursor", cur)
 
 
@@ -525,7 +584,9 @@ def context() -> str:
         units = tr.get("units") or []
         pos = cur[tr["key"]]
         lines.append(f"Track {tr['key']} '{tr['label']}': at unit {pos['unit'] + 1} session {pos['session'] + 1} of "
-                     f"{len(units)} units. Units: " + "; ".join(f"{i}. {u['title']}" for i, u in enumerate(units, 1)))
+                     f"{len(units)} units. Units: " + "; ".join(
+                         f"{i}. {u['title']}" + (" (REMOVED by the user: never plan it)" if removed(u) else "")
+                         for i, u in enumerate(units, 1)))
     exams = exam_dates(profile.tracks())
     if exams:
         names = {tr["key"]: tr["label"] for tr in profile.tracks()}
@@ -563,7 +624,9 @@ async def llm_plan(d: date, draft: dict, ctx: str) -> tuple[dict, str] | None:
         tr = by_key.get(blk.get("key"))
         if tr and blk.get("tasks"):
             here = next((m["unit"] for x in draft.get(blk["key"], []) if isinstance((m := x.get("meta") or {}).get("unit"), int)), None)
-            plan[blk["key"]] = [_to_internal(t, tr, here) for t in blk["tasks"]]
+            # a unit the user took out of the plan is never planned, whatever the model wrote
+            plan[blk["key"]] = [x for x in (_to_internal(t, tr, here) for t in blk["tasks"])
+                                if not is_removed(tr, x["meta"].get("unit"))]
             b = next((b for b, key, _tr in ts if key == blk["key"]), {})
             for t in plan[blk["key"]]:
                 t["meta"] |= _moved(b, tr)
@@ -582,8 +645,9 @@ def runway() -> list[dict]:
     out = []
     for tr in profile.tracks():
         units = tr.get("units") or []
-        out.append({"key": tr["key"], "label": tr["label"], "units": len(units),
-                    "left": max(0, len(units) - cur[tr["key"]]["unit"])})
+        pos = settle(units, dict(cur[tr["key"]]))
+        out.append({"key": tr["key"], "label": tr["label"], "units": sum(1 for u in units if not removed(u)),
+                    "left": len(ahead(units, pos))})
     return out
 
 
@@ -612,6 +676,8 @@ def progress() -> list[dict]:
             tried = best is not None and best["v"] is not None
             if tried and best["p"]:
                 status = "passed"
+            elif removed(u):
+                status = "removed"
             elif not seen_current:
                 status = "tried" if tried else "current"
                 seen_current = True
@@ -619,7 +685,7 @@ def progress() -> list[dict]:
                 status = "tried"
             else:
                 status = "planned" if i < cur[tr["key"]]["unit"] else "todo"
-            units.append({"idx": i, "name": u["title"], "status": status,
+            units.append({"idx": i, "name": u["title"], "status": status, "removed": removed(u),
                           "best": best["v"] if tried else None, "max": best["m"] if tried else None})
         out.append({"key": tr["key"], "label": tr["label"], "units": units})
     return out

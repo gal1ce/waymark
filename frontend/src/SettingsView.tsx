@@ -1,15 +1,15 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { ArchiveRestore, Download, RotateCcw, Trash2, FileText, HardDrive, KeyRound, Keyboard, ListChecks, MessageSquareText, Monitor, Moon, Palette, PencilLine, RefreshCw, Stethoscope, Sun } from 'lucide-react'
+import { ArchiveRestore, ChevronDown, ChevronRight, Download, RotateCcw, Trash2, FileText, HardDrive, KeyRound, Keyboard, ListChecks, MessageSquareText, Monitor, Moon, Palette, PencilLine, RefreshCw, Stethoscope, Sun } from 'lucide-react'
 import type { Ctx } from './App'
 import { ACCENTS, DEFAULT_ACCENT, useAccent, type Side, type ThemePref } from './prefs'
 import { CoachSettingsView } from './Coach'
-import { t, type Key, type Lang } from './i18n'
+import { t, tx, type Key, type Lang } from './i18n'
 import { HealthPanel } from './ProfileView'
-import { api } from './api'
+import { api, type PlanView, type TrackStatus } from './api'
 import { busyProps, useBusy } from './interact'
 import { useLoad } from './ui'
 import { ExamDates, KeyCard } from './Setup'
-import { ColorField, Switch } from './controls'
+import { Checkbox, ColorField, Switch } from './controls'
 import { UpdateSection } from './Update'
 
 const THEMES: { k: ThemePref; label: Key; note: Key; icon: ReactNode }[] = [
@@ -251,6 +251,64 @@ function ResetPanel({ ctx, kind, download, busy: outerBusy }: { ctx: Ctx; kind: 
   )
 }
 
+// shown through tx(), in the interface language (the Progress page uses the same words)
+const UNIT_STATUS: Record<TrackStatus, string> = {
+  passed: 'passed', done: 'done', current: 'now', doing: 'in progress', tried: 'tried, below threshold', planned: 'planned', todo: 'up next', removed: 'taken out',
+}
+
+/** Each course's units with a tick for being in the plan: unticked, a unit is taken out (and can be put back). A passed
+    unit is done and stays; a course keeps at least one unit. */
+function PlanUnits({ p, ctx }: { p: PlanView; ctx: Ctx }) {
+  const [open, setOpen] = useState<string | null>(null)
+  const [busy, run] = useBusy()
+  const set = (track: string, unit: number, on: boolean) => run(async () => {
+    const r = await ctx.run(api.setPlanUnit(track, unit, on))
+    if (r) {
+      ctx.notify(on ? t('Unit put back into the plan') : t('Unit taken out of the plan'), 'ok',
+        r.replanned.length ? t('The days not started yet were planned again.') : undefined)
+      ctx.refresh()
+    }
+  })
+  return (
+    <div className="draft-tracks plan-units">
+      {p.progress.map((tr, ti) => {
+        const kept = tr.units.filter((u) => u.status !== 'removed').length
+        const on = open === tr.key
+        return (
+          <div key={tr.key} className={'draft-track' + (on ? ' open' : '')}>
+            <button type="button" className="draft-track-h" aria-expanded={on} onClick={() => setOpen(on ? null : tr.key)}>
+              {on ? <ChevronDown size={16} strokeWidth={1.6} /> : <ChevronRight size={16} strokeWidth={1.6} />}
+              <span className={'trk-dot trk-' + (ti % 6)} aria-hidden />{tr.label}
+              <span className="t3 mono">{kept < tr.units.length ? t('{a} of {b} units', { a: kept, b: tr.units.length }) : tr.units.length}</span>
+            </button>
+            {on && (
+              <div className="draft-track-b">
+                <ol className="draft-units">
+                  {tr.units.map((u) => {
+                    const out = u.status === 'removed'
+                    const why = u.status === 'passed' ? t('Passed: it stays in the plan') : !out && kept <= 1 ? t('A course keeps at least one unit') : undefined
+                    return (
+                      <li key={u.idx} className={out ? 'du-out' : undefined}>
+                        <div className="du-h">
+                          <span className="du-t">{u.name}</span>
+                          <span className="t3 mono">{tx(UNIT_STATUS[u.status])}</span>
+                          <Checkbox className="du-cb" checked={!out} disabled={busy || !!why} title={why}
+                            label={out ? t('Put {unit} back into the plan', { unit: u.name }) : t('Take {unit} out of the plan', { unit: u.name })}
+                            onChange={(v) => set(tr.key, u.idx, v)} />
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ol>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /** The plan the app runs: what it is, how far each track is, its file, and changing it (always through a new draft). */
 function PlanSection({ ctx }: { ctx: Ctx }) {
   const p = useLoad(() => api.plan(), [ctx.version])
@@ -294,6 +352,9 @@ function PlanSection({ ctx }: { ctx: Ctx }) {
           )
         })}
       </ul>
+      <h3 className="set-sub">{t('Units in the plan')}</h3>
+      <p className="set-note">{t('Untick a unit to take it out of the plan. Days you have started keep their tasks; the days not started yet are planned again without it. Tick it again to put it back.')}</p>
+      <PlanUnits p={p} ctx={ctx} />
       <h3 className="set-sub">{t('Exam dates')}</h3>
       <ExamDates key={p.tracks.map((x) => x.deadline ?? '').join()} tracks={p.tracks} start={p.start_date} today={ctx.meta?.today ?? p.start_date} busy={examBusy} ends={p.track_ends}
         note={t('Each course can have its own exam. In the last week before one, its unfinished units take blocks from courses whose exam is further away; once an exam is over, its blocks go to the next one. Days already planned keep their blocks.')}

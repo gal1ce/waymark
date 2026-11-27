@@ -50,6 +50,9 @@ LATEST_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 PAGE_URL = f"https://github.com/{REPO}/releases/latest"
 CHECK_EVERY = timedelta(hours=6)
 RETRY_AFTER_FAIL = timedelta(minutes=30)
+# seconds per connection or read: latest.json is a redirect to a second host, and on a slow network each connection
+# alone can take several seconds (the check runs in the background, so waiting costs nothing)
+CHECK_TIMEOUT = 30
 USER_AGENT = "Waymark-update-check"
 
 log = logging.getLogger("ctu.updates")
@@ -166,7 +169,7 @@ class Limited(RuntimeError):
 
 def _get(url: str) -> dict:
     req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=8) as r:
+    with urllib.request.urlopen(req, timeout=CHECK_TIMEOUT) as r:
         return json.loads(r.read())
 
 
