@@ -15,7 +15,9 @@ DEFAULT = {"name": "Vega", "personality": "", "verbosity": 2, "effort": "low", "
 # How long the model thinks before answering. Low is fastest; tests and planning keep their own settings.
 EFFORTS = {"low": "Fast: answers in seconds, fine for most questions.",
            "medium": "Balanced: thinks longer, better for tricky concepts.",
-           "high": "Deep: slowest, for hard debugging or long explanations."}
+           "high": "Deep: slowest, for hard debugging or long explanations.",
+           "xhigh": "Deeper: Claude only (elsewhere it is Deep); for the hardest questions.",
+           "max": "Maximum: Claude only (elsewhere it is Deep); slowest and most thorough."}
 
 # Reply language. "auto" follows the user's message, detected by the app (not by the model: small models drift
 # to English when a short Turkish message sits on top of the long English [STATUS]/[TODAY] blocks).

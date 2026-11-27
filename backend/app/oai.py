@@ -30,7 +30,7 @@ STALL_SEC = 40.0
 
 
 def stall_sec(pid: str, effort: str) -> float:
-    return STALL_SEC * {"low": 1.0, "medium": 1.9}.get(effort, 3.0) * (4 if pid == "local" else 1)
+    return STALL_SEC * {"low": 1.0, "medium": 1.9, "xhigh": 4.0, "max": 5.0}.get(effort, 3.0) * (4 if pid == "local" else 1)
 
 
 # ------------------------------------------------------------------ shapes

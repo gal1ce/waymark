@@ -1,15 +1,18 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { flushSync } from 'react-dom'
 import { Check, ChevronDown, CircleAlert, ExternalLink, GripVertical, KeyRound, Plug, X } from 'lucide-react'
-import { api, type AiModel, type AiProvider, type AiView } from './api'
+import { api, type AiModel, type AiProvider, type AiView, type Effort } from './api'
 import type { Ctx } from './App'
-import { Switch } from './controls'
+import { Select, Switch } from './controls'
 import { ModelPicker, toModel, type Catalog } from './ModelPicker'
 import { t } from './i18n'
 import { busyProps, useBusy, useShake } from './interact'
 
 /** Settings → AI providers. Each provider keeps several keys in .env, tried in order; the first provider that is set
     up answers, and the next ones only when the user allows it. */
+// the effort levels by name (shown through t())
+const EFFORT_NAME = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Maximum' } as const
+
 export function AiProviders({ ctx, onSaved }: { ctx: Ctx; onSaved?: () => void }) {
   const [v, setV] = useState<AiView | null>(null)
   const [open, setOpen] = useState<string | null>(null)
@@ -271,6 +274,10 @@ function ProviderBody({ p, view, ctx, setV }: { p: AiProvider; view: AiView; ctx
     const r = await ctx.run(api.aiPut({ models: { [p.id]: { [role]: id } } }))
     if (r) { setV(r); setTests(null); ctx.notify(t('{p} now uses {m} for {r}.', { p: p.label, m: id || t('the same model'), r: role === 'main' ? t('tests and plans') : t('the coach chat') }), 'ok') }
   })
+  const pickEffort = (e: Effort | '') => run(async () => {
+    const r = await ctx.run(api.aiPut({ effort: { [p.id]: e } }))
+    if (r) { setV(r); ctx.notify(e ? t('{p} now thinks at {e} for tests and plans.', { p: p.label, e: t(EFFORT_NAME[e]) }) : t('{p} uses each task\'s own effort again.', { p: p.label }), 'ok') }
+  })
   const test = () => run(async () => {
     const r = await ctx.run(api.aiTest(p.id))
     if (r) { setV(r); setTests(Object.fromEntries(r.results.map((x) => [x.index, x]))) }
@@ -344,6 +351,15 @@ function ProviderBody({ p, view, ctx, setV }: { p: AiProvider; view: AiView; ctx
             : <span className="mono small t2">{p.models.main || '—'}</span>}
           <span className="field-h">{t('Writes the tests, grades them and drafts plans: pick a strong one.')}{p.default_models.main && p.models.main !== p.default_models.main
             ? <>{' '}<button type="button" className="linkish" onClick={() => pickModel('main', p.default_models.main)}>{t('Back to the default ({m})', { m: p.default_models.main })}</button></> : null}</span>
+        </div>
+        <div className="field">
+          <span className="field-l">{t('Thinking effort for tests and plans')}</span>
+          {p.effort_levels.length > 0 ? (<>
+            <Select size="sm" value={p.effort} label={t('{p} thinking effort for tests and plans', { p: p.label })} onChange={pickEffort}
+              options={[{ value: '' as Effort | '', label: t('Each task\'s own (recommended)') }, ...p.effort_levels.map((e) => ({ value: e as Effort | '', label: t(EFFORT_NAME[e]), text: e }))]} />
+            <span className="field-h">{p.effort ? t('Every test, grading and plan is written at this level. Higher thinks longer and uses more of your limits.')
+              : t('Plans, days and test questions are written at high, practice sets and lessons at medium, checks and grading at low.')}</span>
+          </>) : <span className="field-h">{t('{p} takes no effort setting: its models think as they are made to.', { p: p.label })}</span>}
         </div>
         <div className="field">
           <span className="field-l">{t('Coach chat')}</span>

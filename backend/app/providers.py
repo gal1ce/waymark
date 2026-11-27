@@ -69,6 +69,13 @@ PROVIDERS: dict[str, Provider] = {p.id: p for p in [
                   "seconds slower per request."),
 ]}
 CLI = [pid for pid, p in PROVIDERS.items() if p.kind == "cli"]
+
+# The thinking effort each provider takes. Where none, the request carries no effort and the model uses its own
+# (some models would refuse the field). The Anthropic API and Claude Code take every level; Gemini's API and
+# OpenRouter take low to high.
+EFFORT_LEVELS: dict[str, list[str]] = {"anthropic": ["low", "medium", "high", "xhigh", "max"],
+                                       "claude_code": ["low", "medium", "high", "xhigh", "max"],
+                                       "gemini": ["low", "medium", "high"], "openrouter": ["low", "medium", "high"]}
 ORDER = list(PROVIDERS)
 
 
@@ -82,7 +89,7 @@ def _defaults() -> dict:
     .env (it holds keys only)."""
     models = {pid: {"main": p.main, "chat": p.chat} for pid, p in PROVIDERS.items()}
     return {"order": list(ORDER), "fallback": False, "models": models, "local_url": PROVIDERS["local"].base,
-            "local_on": False, "cli_on": {pid: False for pid in CLI}}
+            "local_on": False, "cli_on": {pid: False for pid in CLI}, "effort": {}}
 
 
 def settings() -> dict:
@@ -105,7 +112,17 @@ def settings() -> dict:
     for pid, on in (s.get("cli_on") or {}).items():
         if pid in d["cli_on"]:
             d["cli_on"][pid] = bool(on)
+    # the user's effort for tests and plans, per provider; none stored = each task's own (see effort())
+    d["effort"] = {pid: v for pid, v in (s.get("effort") or {}).items() if v in EFFORT_LEVELS.get(pid, [])}
     return d
+
+
+def effort(pid: str, asked: str, role: str = "main") -> str:
+    """The effort a call sends: the user's choice for this provider's tests and plans when there is one (the coach
+    chat keeps its own, from the coach's settings), else what the task asked for."""
+    if role == "main":
+        return settings()["effort"].get(pid) or asked
+    return asked
 
 
 SAME = "=main"
@@ -125,7 +142,7 @@ def _stored_models(models: dict) -> dict:
 
 def save_settings(order: list[str] | None = None, fallback: bool | None = None, models: dict | None = None,
                   local_url: str | None = None, local_on: bool | None = None,
-                  cli_on: dict[str, bool] | None = None) -> dict:
+                  cli_on: dict[str, bool] | None = None, effort: dict[str, str] | None = None) -> dict:
     s = settings()
     if order is not None:
         bad = [p for p in order if p not in PROVIDERS]
@@ -154,6 +171,15 @@ def save_settings(order: list[str] | None = None, fallback: bool | None = None, 
         if pid not in CLI:
             raise SetupError(f"Unknown provider: {pid}.")
         s["cli_on"][pid] = bool(on)
+    for pid, v in (effort or {}).items():
+        if pid not in PROVIDERS:
+            raise SetupError(f"Unknown provider: {pid}.")
+        if v and v not in EFFORT_LEVELS.get(pid, []):
+            raise SetupError(f"{PROVIDERS[pid].label} doesn't take that effort.")
+        if v:
+            s["effort"][pid] = v
+        else:
+            s["effort"].pop(pid, None)
     db.kv_set("ai_settings", {**s, "models": _stored_models(s["models"])})
     return s
 
@@ -342,6 +368,7 @@ def view() -> dict:
                     "models": s["models"][pid], "default_models": {"main": p.main, "chat": p.chat},
                     "base": base(pid), "kind": p.kind, "command": p.command,
                     "on": bool(s["cli_on"].get(pid)) if p.kind == "cli" else None,
-                    "installed": bool(installed(pid)) if p.kind == "cli" else None})
+                    "installed": bool(installed(pid)) if p.kind == "cli" else None,
+                    "effort": s["effort"].get(pid, ""), "effort_levels": EFFORT_LEVELS.get(pid, [])})
     return {"providers": out, "fallback": s["fallback"], "local_url": s["local_url"], "local_on": s["local_on"],
             "primary": prim, "env_file": str(envfile.path())}
