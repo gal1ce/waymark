@@ -95,11 +95,12 @@ export default function DayView({ date, ctx }: { date: string; ctx: Ctx }) {
       {day.status === 'off' && day.can_add?.length ? <AddStudy day={day} ctx={ctx} /> : !open ? (<>
         <div className="card banner">
           <Lock size={18} strokeWidth={1.5} className="t3" />
-          {day.status === 'off' ? <span><b>{tr('No study on {day}.', { day: weekday(day.date) })}</b> {tr('The plan puts nothing on this day')}</span>
+          {day.status === 'off' && !preStart ? <span><b>{tr('No study on {day}.', { day: weekday(day.date) })}</b> {tr('The plan puts nothing on this day')}</span>
             : preStart ? <span><b>{tr('The plan starts {day} {date}.', { day: weekday(ctx.ov!.start_date), date: fmtDate(ctx.ov!.start_date) })}</b> {tr("The day's content opens that morning")}</span>
               : day.outline?.length ? <span><b>{tr('This day is locked.')}</b> {tr('Below is what it will work on. Task details open that morning, and a retake or today\'s results can still change it')}</span>
                 : day.exists ? <span><b>{tr('This day is locked.')}</b> {tr("Today's work comes first. It opens in the morning and is reshaped by today's results")}</span>
                   : <span>{tr('No plan for this day')}</span>}
+          {preStart && day.date === ctx.ov?.today && <StartNow ctx={ctx} />}
         </div>
         {day.status === 'locked' && day.outline && day.outline.length > 0 && <Outline items={day.outline} />}
       </>) : (
@@ -149,6 +150,21 @@ export default function DayView({ date, ctx }: { date: string; ctx: Ctx }) {
   )
 }
 
+
+/** A plan of the user's own that starts on a later day: start it today instead. The first work comes today and the
+    days after move up; a today the plan has off becomes a one-off study day. */
+export function StartNow({ ctx }: { ctx: Ctx }) {
+  const [busy, run] = useBusy()
+  if (ctx.meta?.plan?.key !== 'custom' || !ctx.ov || ctx.ov.today >= ctx.ov.start_date) return null
+  const go = async () => {
+    const ok = await ctx.confirm({
+      title: tr('Start the plan today?'), action: tr('Start today'),
+      body: tr('The plan starts today instead of {date}. Its first work comes today and every planned day after it moves up. Your weekly study days stay the same.', { date: fmtDate(ctx.ov!.start_date) }),
+    })
+    if (ok) run(async () => { const r = await ctx.run(api.startNow()); if (r) { ctx.notify(tr('The plan starts today'), 'ok'); ctx.refresh() } })
+  }
+  return <button type="button" className="btn primary sm start-now" {...busyProps(busy)} onClick={go}><Play size={14} strokeWidth={1.8} /><span>{tr('Start the plan today')}</span></button>
+}
 
 /** A day off of a plan of the user's own: study on it anyway, for this date only. It copies the blocks of one of the
     plan's study days and takes the next work of each course, so the planned days after it move up. */

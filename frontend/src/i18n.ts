@@ -237,6 +237,53 @@ const TR = {
   '{p} takes no effort setting: its models think as they are made to.': '{p} düşünme düzeyi ayarı almıyor: modelleri kendi varsayılanıyla düşünür.',
   '{p} now thinks at {e} for tests and plans.': '{p} testler ve planlar için artık {e} düzeyde düşünüyor.', "{p} uses each task's own effort again.": '{p} yeniden her işin kendi düzeyini kullanıyor.',
   'Deeper': 'Daha derin', 'Max': 'En derin',
+  // settings: one section per page, groups and rows (SettingsView, AiProviders, Coach, Update, settingsui)
+  'Study': 'Çalışma', 'App': 'Uygulama', 'Data and system': 'Veri ve sistem', 'Back to the app': 'Uygulamaya dön', 'Search settings': 'Ayarlarda ara',
+  'Visual style': 'Görünüş', 'Light or dark, or follow this computer.': 'Açık ya da koyu, ya da bu bilgisayarı izlesin.',
+  'Buttons, links, the selection and focus rings.': 'Düğmeler, linkler, seçim ve odak halkaları.', 'Language of the app': 'Uygulamanın dili',
+  'Drag a row to change the order: the first one that is set up answers. Open one for its keys and models.': 'Sırayı değiştirmek için bir satırı sürükle: kurulu olan ilk sağlayıcı cevap verir. Anahtarları ve modelleri için birini aç.',
+  'Demo clock': 'Demo saati', 'Details': 'Ayrıntılar', 'Show': 'Göster', 'Hide': 'Gizle', 'Download': 'İndir', 'Copy the full path': 'Tam yolu kopyala',
+  'What you study, by when, and the units in it.': 'Ne çalıştığın, ne zamana kadar ve içindeki üniteler.',
+  'Who writes your plans and tests and answers in the coach chat.': 'Planlarını ve testlerini kim yazar, koç sohbetinde kim cevap verir.',
+  'Its name, how it replies, and what it remembers about you.': 'Adı, nasıl cevap verdiği ve senin hakkında neyi hatırladığı.',
+  'Theme, language, colour and where the panels sit.': 'Tema, dil, renk ve panellerin yeri.',
+  'Where everything is kept, backups, and starting again.': 'Her şeyin nerede durduğu, yedekler ve baştan başlamak.',
+  'The version you have and how new ones arrive.': 'Kullandığın sürüm ve yenilerinin nasıl geldiği.',
+  'Whether everything behind the app is working.': 'Uygulamanın arkasındaki her şeyin çalışıp çalışmadığı.',
+  'Shortcuts that work across the app.': 'Uygulamanın her yerinde çalışan kısayollar.', 'Shortcuts': 'Kısayollar',
+  'No plan yet': 'Henüz plan yok', 'Approved {date}.': '{date} tarihinde onaylandı.', 'Courses and units': 'Dersler ve üniteler', '{n} taken out': '{n} çıkarıldı',
+  'Language and colour': 'Dil ve renk', 'Your data': 'Verilerin', 'Data folder': 'Veri klasörü', 'Last automatic backup': 'Son otomatik yedek',
+  'A .zip file with everything above.': 'Yukarıdaki her şeyi içeren bir .zip dosyası.', 'Start again': 'Baştan başla',
+  "These can't be undone from here. Each one asks you to type a word first.": 'Bunlar buradan geri alınamaz. Her biri önce bir kelime yazmanı ister.',
+  'Needs attention': 'İlgilenmen gerekenler', 'Everything works': 'Her şey çalışıyor',
+  'Nothing needs you right now. Problems show here and in the notifications.': 'Şu an seni bekleyen bir şey yok. Sorunlar burada ve bildirimlerde görünür.',
+  'Closing {d} is unfinished': '{d} gününün kapanışı yarım kaldı', 'retried every 10 minutes': '10 dakikada bir yeniden denenir',
+  'Parts': 'Parçalar', 'AI provider': 'Yapay zekâ sağlayıcısı', 'Next phases': 'Sonraki aşamalar',
+  'Where each file is and what the app wrote, for when something needs fixing.': 'Bir şeyi düzeltmek gerektiğinde: her dosyanın yeri ve uygulamanın yazdıkları.',
+  'Running from source': 'Kaynak koddan çalışıyor', 'Waymark {v}': 'Waymark {v}',
+  'Providers': 'Sağlayıcılar', 'How they are used': 'Nasıl kullanıldıkları',
+  'Drag a row to change the order: the first one that is set up answers. Pick one to see its keys and models.':
+    'Sırayı değiştirmek için bir satırı sürükle: kurulu olan ilk sağlayıcı cevap verir. Anahtarlarını ve modellerini görmek için birini seç.',
+  'Drag a row to change the order: the first one that is set up answers. Open a row to add keys and pick its models.':
+    'Sırayı değiştirmek için bir satırı sürükle: kurulu olan ilk sağlayıcı cevap verir. Anahtar eklemek ve model seçmek için satırı aç.',
+  'When a provider fails, try the next one': 'Bir sağlayıcı başarısız olursa sıradakini dene',
+  'On: the providers above are tried top to bottom until one answers. A reply from another provider says so.':
+    'Açık: yukarıdaki sağlayıcılar biri cevap verene kadar yukarıdan aşağı denenir. Başka bir sağlayıcıdan gelen cevap bunu belirtir.',
+  'Where the keys are kept': 'Anahtarların durduğu yer',
+  'In this file on this computer, never in a backup. A provider can have several keys: they are tried one after the other.':
+    'Bu bilgisayarda bu dosyada; hiçbir zaman yedekte değil. Bir sağlayıcının birden çok anahtarı olabilir: sırayla denenirler.',
+  'Sends one short question through the program.': 'Program üzerinden kısa bir soru gönderir.', 'Asks every key for a one-word reply.': 'Her anahtardan tek kelimelik bir cevap ister.',
+  'Model for tests and plans': 'Testler ve planlar için model', 'Model for the coach chat': 'Koç sohbeti için model', 'Connection': 'Bağlantı',
+  'Name and picture': 'Ad ve resim', 'How it replies': 'Nasıl cevap verir', 'New memory note': 'Yeni hafıza notu',
+  'terse': 'çok kısa', 'short': 'kısa', 'moderate': 'orta', 'detailed': 'ayrıntılı', 'thorough': 'çok ayrıntılı',
+  'data folder': 'veri klasörü', 'database': 'veritabanı', 'study repo': 'çalışma deposu', 'Kolibri (Khan content)': 'Kolibri (Khan içeriği)',
+
+  // starting a plan early (Day, Home)
+  'Start the plan today?': 'Plan bugün başlasın mı?', 'Start today': 'Bugün başlat', 'Start the plan today': 'Planı bugün başlat',
+  'The plan starts today instead of {date}. Its first work comes today and every planned day after it moves up. Your weekly study days stay the same.':
+    'Plan {date} yerine bugün başlar. İlk işleri bugüne gelir ve sonraki planlı günler öne kayar. Haftalık çalışma günlerin aynı kalır.',
+  'The plan starts today': 'Plan bugün başladı',
+  'Starting early is for a plan of your own.': 'Erken başlatmak yalnızca kendi planında olur.', 'The plan has started already.': 'Plan zaten başladı.',
   // searching the web (subscriptions)
   'Search the web': 'İnternette ara', '{n} web searches so far': 'şimdiye kadar {n} web araması',
   "While drafting a plan it looks up real, current courses and sources; the coach looks up current things you ask about and lists the links. Only search and page reading: the program gets nothing else on this computer. It is slower and counts against your plan's limits.":

@@ -915,6 +915,12 @@ async def extra_day_remove(ds: str):
     return await planner.remove_extra_day(_day(ds))
 
 
+@app.post("/api/plan/start-now")
+async def plan_start_now():
+    """A plan that starts on a later day starts today instead."""
+    return await planner.start_now()
+
+
 @app.get("/api/plan/file")
 def plan_file():
     p = planlog.write()

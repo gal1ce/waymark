@@ -1,11 +1,12 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { flushSync } from 'react-dom'
-import { Check, ChevronDown, CircleAlert, ExternalLink, GripVertical, KeyRound, Plug, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, ExternalLink, GripVertical, KeyRound, Plug, X } from 'lucide-react'
 import { api, type AiModel, type AiProvider, type AiView, type Effort } from './api'
 import type { Ctx } from './App'
 import { Select, Switch } from './controls'
 import { ModelPicker, toModel, type Catalog } from './ModelPicker'
 import { t } from './i18n'
+import { Group, PathField, Row } from './settingsui'
 import { busyProps, useBusy, useShake } from './interact'
 
 /** Settings → AI providers. Each provider keeps several keys in .env, tried in order; the first provider that is set
@@ -13,7 +14,7 @@ import { busyProps, useBusy, useShake } from './interact'
 // the effort levels by name (shown through t())
 const EFFORT_NAME = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Maximum' } as const
 
-export function AiProviders({ ctx, onSaved }: { ctx: Ctx; onSaved?: () => void }) {
+export function AiProviders({ ctx, onSaved, bare, detail }: { ctx: Ctx; onSaved?: () => void; bare?: boolean; detail?: string }) {
   const [v, setV] = useState<AiView | null>(null)
   const [open, setOpen] = useState<string | null>(null)
   const [busy, run] = useBusy()
@@ -24,7 +25,7 @@ export function AiProviders({ ctx, onSaved }: { ctx: Ctx; onSaved?: () => void }
     api.ai().then((x) => {
       if (off) return
       setV(x)
-      if (first.current) { first.current = false; setOpen(x.primary ?? null) }
+      if (first.current) { first.current = false; setOpen(bare ? x.primary ?? null : null) }
     }).catch(() => {})
     return () => { off = true }
   }, [ctx.version])
@@ -33,7 +34,7 @@ export function AiProviders({ ctx, onSaved }: { ctx: Ctx; onSaved?: () => void }
     // shown in the new order at once; the server's answer follows
     setV({ ...v, providers: order.map((id) => v.providers.find((p) => p.id === id)!) })
     put({ order })
-  }, () => setOpen(null))
+  }, () => { if (bare) setOpen(null) })   // a row open inline closes while one is dragged
   if (!v) return null
 
   const put = (b: Parameters<typeof api.aiPut>[0]) => run(async () => {
@@ -47,21 +48,9 @@ export function AiProviders({ ctx, onSaved }: { ctx: Ctx; onSaved?: () => void }
   const primary = preview.find((p) => p.ready)?.id ?? null
   const ready = preview.filter((p) => p.ready)
 
-  return (
+  const list = (
     <div className="ai">
-      <p className="set-note">
-        {t('The coach, tests and plans are written by an AI provider you choose. Keys are kept in {file} on this computer, never in a backup. A provider can have several keys: they are tried one after the other.', { file: v.env_file })}
-      </p>
-      <div className="ai-fallback">
-        <Switch checked={v.fallback} disabled={busy} onChange={(on) => put({ fallback: on })}>{t('When every key of a provider fails, try the next provider')}</Switch>
-        <p className="field-h">{v.fallback
-          ? t('On: the providers below are tried top to bottom until one answers. A reply from another provider says so.')
-          : others
-            ? t('Off: only the first provider that is set up answers; the {n} other set-up provider(s) wait.', { n: others })
-            : t('Off: only the first provider that is set up answers.')}</p>
-      </div>
       <div className="ai-order-h">
-        <span className="ai-sub">{t('Order')}</span>
         <span className={'ai-preview' + (sort.dragging ? ' on' : '')} aria-hidden={!sort.dragging}>
           {ready.length
             ? ready.map((p, k) => <span key={p.id} className={k === 0 ? 'first' : ''}>{p.label}</span>)
@@ -69,18 +58,56 @@ export function AiProviders({ ctx, onSaved }: { ctx: Ctx; onSaved?: () => void }
             : <span>{t('No provider is set up yet')}</span>}
           {!v.fallback && ready.length > 1 && <span className="ai-preview-n">{t('only the first answers')}</span>}
         </span>
-        {!sort.dragging && <span className="field-h">{t('Drag a row to change the order.')}</span>}
       </div>
       <ol className={'ai-list' + (sort.dragging ? ' sorting' : '')} ref={sort.listRef}>
         {v.providers.map((p, i) => (
-          <ProviderRow key={p.id} p={p} pos={sort.preview.indexOf(p.id)} primary={p.id === primary} open={open === p.id} view={v} ctx={ctx}
-            toggle={() => { if (!sort.justDropped()) setOpen(open === p.id ? null : p.id) }}
+          <ProviderRow key={p.id} p={p} pos={sort.preview.indexOf(p.id)} primary={p.id === primary} open={open === p.id} view={v} ctx={ctx} master={!bare}
+            toggle={() => { if (sort.justDropped()) return; if (bare) setOpen(open === p.id ? null : p.id); else ctx.go({ kind: 'settings', section: 'ai', sub: p.id }) }}
             setV={(x) => { setV(x); ctx.refresh(); onSaved?.() }}
             drag={sort.rowProps(p.id, i, p.label)} handle={sort.handleProps(i, p.label)} />
         ))}
       </ol>
       <span className="sr-only" aria-live="polite">{sort.said}</span>
     </div>
+  )
+  const fallback = (
+    <Row label={t('When a provider fails, try the next one')} hint={v.fallback
+      ? t('On: the providers above are tried top to bottom until one answers. A reply from another provider says so.')
+      : others
+        ? t('Off: only the first provider that is set up answers; the {n} other set-up provider(s) wait.', { n: others })
+        : t('Off: only the first provider that is set up answers.')}>
+      <Switch checked={v.fallback} disabled={busy} onChange={(on) => put({ fallback: on })} label={t('When a provider fails, try the next one')} />
+    </Row>
+  )
+  const keys = (
+    <Row label={t('Where the keys are kept')} hint={t('In this file on this computer, never in a backup. A provider can have several keys: they are tried one after the other.')}>
+      <PathField path={v.env_file} keep={2} />
+    </Row>
+  )
+  // in plan setup the providers sit on the wizard's own panel: no cards inside it
+  if (bare) return <>{list}{fallback}{keys}</>
+  // Settings: the list; a provider opens on a page of its own (#/settings/ai/<id>), with a way back to the list
+  const sel = detail ? v.providers.find((p) => p.id === detail) : undefined
+  if (sel) {
+    const st = status(sel, v)
+    return (
+      <>
+        <header className="set-head">
+          <button type="button" className="set-up" onClick={() => ctx.go({ kind: 'settings', section: 'ai' })}><ChevronLeft size={15} strokeWidth={1.7} /><span>{t('AI providers')}</span></button>
+          <h1>{sel.label}{sel.id === primary && <span className="ai-main">{t('Answers first')}</span>}</h1>
+          <p>{st.text}</p>
+        </header>
+        <Group title={t('Settings')}>
+          <ProviderBody key={sel.id} p={sel} view={v} ctx={ctx} setV={(x) => { setV(x); ctx.refresh(); onSaved?.() }} />
+        </Group>
+      </>
+    )
+  }
+  return (
+    <>
+      <Group title={t('Providers')} note={t('Drag a row to change the order: the first one that is set up answers. Open one for its keys and models.')}>{list}</Group>
+      <Group title={t('How they are used')}>{fallback}{keys}</Group>
+    </>
   )
 }
 
@@ -211,8 +238,10 @@ function status(p: AiProvider, v: AiView): { text: string; tone: 'ok' | 'warn' |
   return bad ? { text: `${n} · ${t('{n} failing', { n: bad })}`, tone: 'warn' } : { text: n, tone: 'ok' }
 }
 
-function ProviderRow({ p, pos, primary, open, view, ctx, toggle, setV, drag, handle }: {
+function ProviderRow({ p, pos, primary, open, view, ctx, toggle, setV, drag, handle, master }: {
   p: AiProvider; pos: number; primary: boolean; open: boolean; view: AiView; ctx: Ctx; toggle: () => void
+  /** in Settings a row picks the provider shown beside the list, instead of opening under itself */
+  master?: boolean
   setV: (v: AiView) => void
   drag: { onPointerDown: (e: React.PointerEvent) => void; style?: CSSProperties; held: boolean }
   handle: { 'aria-label': string; onKeyDown: (e: React.KeyboardEvent) => void }
@@ -220,19 +249,19 @@ function ProviderRow({ p, pos, primary, open, view, ctx, toggle, setV, drag, han
   const st = status(p, view)
   const body = useId()
   return (
-    <li className={'ai-row' + (open ? ' open' : '') + (primary ? ' primary' : '') + (drag.held ? ' held' : '') + (p.ready ? '' : ' idle')}
+    <li className={'ai-row' + (open ? (master ? ' sel' : ' open') : '') + (primary ? ' primary' : '') + (drag.held ? ' held' : '') + (p.ready ? '' : ' idle')}
       style={drag.style} onPointerDown={drag.onPointerDown}>
       <div className="ai-row-head">
         <button type="button" className="ai-grip" {...handle}><GripVertical size={16} strokeWidth={1.6} /></button>
         <span className="ai-pos" aria-hidden>{pos + 1}</span>
-        <button type="button" className="ai-row-btn" aria-expanded={open} aria-controls={body} onClick={toggle}>
+        <button type="button" className="ai-row-btn" {...(master ? { 'aria-pressed': open } : { 'aria-expanded': open, 'aria-controls': body })} onClick={toggle}>
           <span className="ai-name">{p.label}</span>
           {primary && <span className="ai-main">{t('Answers first')}</span>}
           <span className={'ai-st ' + st.tone}>{st.text}</span>
-          <ChevronDown className="ai-chev" size={16} strokeWidth={1.6} />
+          {master ? <ChevronRight className="ai-chev" size={16} strokeWidth={1.6} /> : <ChevronDown className="ai-chev" size={16} strokeWidth={1.6} />}
         </button>
       </div>
-      {open && <div className="ai-body" id={body}><ProviderBody p={p} view={view} ctx={ctx} setV={setV} /></div>}
+      {open && !master && <div className="ai-body" id={body}><ProviderBody p={p} view={view} ctx={ctx} setV={setV} /></div>}
     </li>
   )
 }
@@ -287,105 +316,96 @@ function ProviderBody({ p, view, ctx, setV }: { p: AiProvider; view: AiView; ctx
     if (r) { setV(r); setTests(Object.fromEntries(r.results.map((x) => [x.index, x]))) }
   })
 
+  const picker = (role: 'main' | 'chat') => canAsk
+    ? <ModelPicker label={role === 'main' ? t('{p} model for tests and plans', { p: p.label }) : t('{p} model for the coach chat', { p: p.label })}
+        value={p.models[role]} catalog={cat} load={load} provider={p.label} same={role === 'chat' ? p.models.main : undefined} onPick={(id) => pickModel(role, id)} />
+    : <span className="sr-v mono">{p.models[role] || (role === 'chat' ? t('Same as tests and plans') : '—')}</span>
+  const testHint = tests?.[0] && sub ? (tests[0].ok ? t('Works') : tests[0].reason)
+    : !canAsk ? (local ? t('Switch the local model on to see the models it has.') : sub ? t('Switch it on to pick a model.') : t('Add a key to see the models {p} offers.', { p: p.label }))
+      : !p.models.main ? t('Pick a model: until then {p} is skipped.', { p: p.label })
+        : sub ? t('Sends one short question through the program.') : t('Asks every key for a one-word reply.')
+
   return (
     <div className="ai-in">
-      <p className="field-h">{p.note}{p.keys_url && <>{' '}<a href={p.keys_url} target="_blank" rel="noreferrer">{t('Get a key')}<ExternalLink size={12} strokeWidth={1.6} /></a></>}</p>
+      <p className="ai-about">{p.note}{p.keys_url && <>{' '}<a href={p.keys_url} target="_blank" rel="noreferrer">{t('Get a key')}<ExternalLink size={12} strokeWidth={1.6} /></a></>}</p>
 
-      {local && (
-        <div className="ai-local">
-          <Switch checked={view.local_on} disabled={busy} onChange={(on) => run(async () => { const r = await ctx.run(api.aiPut({ local_on: on })); if (r) setV(r) })}>{t('Use a model running on this computer')}</Switch>
+      {local && (<>
+        <Row label={t('Use a model running on this computer')}>
+          <Switch checked={view.local_on} disabled={busy} label={t('Use a model running on this computer')} onChange={(on) => run(async () => { const r = await ctx.run(api.aiPut({ local_on: on })); if (r) setV(r) })} />
+        </Row>
+        <Row label={t('Server address')} htmlFor={list + '-url'} hint={t('Ollama: http://localhost:11434/v1 · LM Studio: http://localhost:1234/v1. A key is only needed if your server asks for one.')} stack>
           <form className="inline-form" onSubmit={(e) => { e.preventDefault(); run(async () => { const r = await ctx.run(api.aiPut({ local_url: url })); if (r) { setV(r); ctx.notify(t('Saved'), 'ok') } }) }}>
-            <label className="field-l" htmlFor={list + '-url'}>{t('Server address')}</label>
             <input id={list + '-url'} className="input mono ai-url" value={url} onChange={(e) => setUrl(e.target.value)} spellCheck={false} placeholder="http://localhost:11434/v1" />
             {url !== view.local_url && <button className="btn sm" type="submit" {...busyProps(busy)}><span>{t('Save')}</span></button>}
           </form>
-          <p className="field-h">{t('Ollama: http://localhost:11434/v1 · LM Studio: http://localhost:1234/v1. A key is only needed if your server asks for one.')}</p>
-        </div>
-      )}
+        </Row>
+      </>)}
 
       {sub && (
-        <div className="ai-local">
-          <Switch checked={!!p.on} disabled={busy || !p.installed} onChange={(on) => run(async () => { const r = await ctx.run(api.aiPut({ cli_on: { [p.id]: on } })); if (r) { setV(r); setTests(null) } })}>{t('Use my subscription through the {c} program', { c: p.command })}</Switch>
-          <p className="field-h">{p.installed
+        <Row label={t('Use my subscription through the {c} program', { c: p.command })}
+          hint={p.installed
             ? t('Sign in once: run {c} in a terminal and log in with your account. The app runs it in the background with its own tools switched off, apart from web search when that is on; API keys in .env are not passed to it.', { c: p.command })
-            : t('The {c} program isn\'t installed on this computer. Install it, sign in once, then switch this on.', { c: p.command })}</p>
-          {tests?.[0] && <p className={'ai-key-st ' + (tests[0].ok ? 'ok' : 'bad')}>{tests[0].ok ? <><Check size={13} strokeWidth={2} />{t('Works')}</> : <><CircleAlert size={13} strokeWidth={1.8} />{tests[0].reason}</>}</p>}
-        </div>
+            : t('The {c} program isn\'t installed on this computer. Install it, sign in once, then switch this on.', { c: p.command })}>
+          <Switch checked={!!p.on} disabled={busy || !p.installed} label={t('Use my subscription through the {c} program', { c: p.command })}
+            onChange={(on) => run(async () => { const r = await ctx.run(api.aiPut({ cli_on: { [p.id]: on } })); if (r) { setV(r); setTests(null) } })} />
+        </Row>
       )}
 
-      {!sub && <div className="ai-keys">
-        <div className="ai-sub">{t('Keys')} <span className="t3 mono">{p.env}</span></div>
-        {p.keys.length ? (
-          <ol>
-            {p.keys.map((k) => {
-              const r = tests?.[k.index]
-              const ok = r ? r.ok : k.ok
-              const reason = r ? r.reason : k.reason
-              return (
-                <li key={k.index} className="ai-key">
-                  <span className="ai-key-n">{k.index + 1}</span>
-                  <span className="mono">{k.hint}</span>
-                  <span className={'ai-key-st ' + (ok === true ? 'ok' : ok === false ? 'bad' : '')}>
-                    {ok === true ? <><Check size={13} strokeWidth={2} />{t('Works')}</>
-                      : ok === false ? <><CircleAlert size={13} strokeWidth={1.8} />{reason}{k.resting ? ' · ' + t('resting for a few minutes') : ''}</>
-                        : t('Not used yet')}
-                  </span>
-                  <button type="button" className="icon-btn" onClick={() => remove(k.index, k.hint)} aria-label={t('Remove key {n}', { n: k.index + 1 })} title={t('Remove')}><X size={14} strokeWidth={1.6} /></button>
-                </li>
-              )
-            })}
-          </ol>
-        ) : !local && <p className="field-h">{t('No key yet.')}</p>}
-        <form className="inline-form" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); add() }}>
-          <label className="sr-only" htmlFor={list + '-key'}>{t('{p} API key', { p: p.label })}</label>
-          <input id={list + '-key'} className={'input key-input mono' + (shaking ? ' shake' : '')} type="password" autoComplete="off" spellCheck={false}
-            placeholder={p.keys.length ? t('Another key') : t('Paste a key')} value={key} onChange={(e) => setKey(e.target.value)} />
-          <button type="submit" className="btn primary sm" {...busyProps(busy)}><KeyRound size={14} strokeWidth={1.6} /><span>{t('Check and add')}</span></button>
-        </form>
-        <p className="field-h">{t('The key is checked with {p} first, then added to the end of its line in .env.', { p: p.label })}</p>
-      </div>}
+      {!sub && (
+        <Row label={t('Keys')} hint={t('The key is checked with {p} first, then added to the end of its line in .env.', { p: p.label })} stack>
+          {p.keys.length > 0 && (
+            <ol className="ai-keys">
+              {p.keys.map((k) => {
+                const r = tests?.[k.index]
+                const ok = r ? r.ok : k.ok
+                const reason = r ? r.reason : k.reason
+                return (
+                  <li key={k.index} className="ai-key">
+                    <span className="ai-key-n">{k.index + 1}</span>
+                    <span className="mono">{k.hint}</span>
+                    <span className={'ai-key-st ' + (ok === true ? 'ok' : ok === false ? 'bad' : '')}>
+                      {ok === true ? <><Check size={13} strokeWidth={2} />{t('Works')}</>
+                        : ok === false ? <><CircleAlert size={13} strokeWidth={1.8} />{reason}{k.resting ? ' · ' + t('resting for a few minutes') : ''}</>
+                          : t('Not used yet')}
+                    </span>
+                    <button type="button" className="icon-btn sm" onClick={() => remove(k.index, k.hint)} aria-label={t('Remove key {n}', { n: k.index + 1 })} title={t('Remove')}><X size={14} strokeWidth={1.6} /></button>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+          <form className="inline-form" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); add() }}>
+            <label className="sr-only" htmlFor={list + '-key'}>{t('{p} API key', { p: p.label })}</label>
+            <input id={list + '-key'} className={'input key-input mono' + (shaking ? ' shake' : '')} type="password" autoComplete="off" spellCheck={false}
+              placeholder={p.keys.length ? t('Another key') : t('Paste a key')} value={key} onChange={(e) => setKey(e.target.value)} />
+            <button type="submit" className="btn sm" {...busyProps(busy)}><KeyRound size={14} strokeWidth={1.6} /><span>{t('Check and add')}</span></button>
+          </form>
+        </Row>
+      )}
 
-      <div className="ai-models">
-        <div className="ai-sub">{t('Models')}</div>
-        <div className="field">
-          <span className="field-l">{t('Tests and plans')}</span>
-          {canAsk
-            ? <ModelPicker label={t('{p} model for tests and plans', { p: p.label })} value={p.models.main} catalog={cat} load={load} provider={p.label}
-                onPick={(id) => pickModel('main', id)} />
-            : <span className="mono small t2">{p.models.main || '—'}</span>}
-          <span className="field-h">{t('Writes the tests, grades them and drafts plans: pick a strong one.')}{p.default_models.main && p.models.main !== p.default_models.main
-            ? <>{' '}<button type="button" className="linkish" onClick={() => pickModel('main', p.default_models.main)}>{t('Back to the default ({m})', { m: p.default_models.main })}</button></> : null}</span>
-        </div>
-        {p.web !== null && (
-          <div className="field">
-            <Switch checked={p.web} disabled={busy} onChange={pickWeb}>{t('Search the web')}</Switch>
-            <span className="field-h">{t('While drafting a plan it looks up real, current courses and sources; the coach looks up current things you ask about and lists the links. Only search and page reading: the program gets nothing else on this computer. It is slower and counts against your plan\'s limits.')}</span>
-          </div>
+      <Row label={t('Model for tests and plans')} hint={<>{t('Writes the tests, grades them and drafts plans: pick a strong one.')}{p.default_models.main && p.models.main !== p.default_models.main
+        ? <>{' '}<button type="button" className="linkish" onClick={() => pickModel('main', p.default_models.main)}>{t('Back to the default ({m})', { m: p.default_models.main })}</button></> : null}</>}>
+        {picker('main')}
+      </Row>
+      <Row label={t('Model for the coach chat')} hint={t('Answers in the chat: a fast, cheap one is fine.')}>{picker('chat')}</Row>
+      <Row label={t('Thinking effort for tests and plans')}
+        hint={p.effort_levels.length === 0 ? t('{p} takes no effort setting: its models think as they are made to.', { p: p.label })
+          : p.effort ? t('Every test, grading and plan is written at this level. Higher thinks longer and uses more of your limits.')
+            : t('Plans, days and test questions are written at high, practice sets and lessons at medium, checks and grading at low.')}>
+        {p.effort_levels.length > 0 && (
+          <Select size="sm" value={p.effort} label={t('{p} thinking effort for tests and plans', { p: p.label })} onChange={pickEffort}
+            options={[{ value: '' as Effort | '', label: t('Each task\'s own (recommended)') }, ...p.effort_levels.map((e) => ({ value: e as Effort | '', label: t(EFFORT_NAME[e]), text: e }))]} />
         )}
-        <div className="field">
-          <span className="field-l">{t('Thinking effort for tests and plans')}</span>
-          {p.effort_levels.length > 0 ? (<>
-            <Select size="sm" value={p.effort} label={t('{p} thinking effort for tests and plans', { p: p.label })} onChange={pickEffort}
-              options={[{ value: '' as Effort | '', label: t('Each task\'s own (recommended)') }, ...p.effort_levels.map((e) => ({ value: e as Effort | '', label: t(EFFORT_NAME[e]), text: e }))]} />
-            <span className="field-h">{p.effort ? t('Every test, grading and plan is written at this level. Higher thinks longer and uses more of your limits.')
-              : t('Plans, days and test questions are written at high, practice sets and lessons at medium, checks and grading at low.')}</span>
-          </>) : <span className="field-h">{t('{p} takes no effort setting: its models think as they are made to.', { p: p.label })}</span>}
-        </div>
-        <div className="field">
-          <span className="field-l">{t('Coach chat')}</span>
-          {canAsk
-            ? <ModelPicker label={t('{p} model for the coach chat', { p: p.label })} value={p.models.chat} catalog={cat} load={load} provider={p.label}
-                same={p.models.main} onPick={(id) => pickModel('chat', id)} />
-            : <span className="mono small t2">{p.models.chat || t('Same as tests and plans')}</span>}
-          <span className="field-h">{t('Answers in the chat: a fast, cheap one is fine.')}</span>
-        </div>
-        {!canAsk && <p className="field-h">{local ? t('Switch the local model on to see the models it has.') : sub ? t('Switch it on to pick a model.') : t('Add a key to see the models {p} offers.', { p: p.label })}</p>}
-        {!p.models.main && <p className="ai-warn"><CircleAlert size={13} strokeWidth={1.8} />{t('Pick a model: until then {p} is skipped.', { p: p.label })}</p>}
-        <div className="inline-form">
-          <button type="button" className="btn ghost sm ai-test" {...busyProps(busy)} disabled={busy || !canAsk || !p.models.main} onClick={test}>
-            <Plug size={14} strokeWidth={1.6} /><span>{sub ? t('Test it') : t('Test the keys')}</span></button>
-        </div>
-      </div>
+      </Row>
+      {p.web !== null && (
+        <Row label={t('Search the web')} hint={t('While drafting a plan it looks up real, current courses and sources; the coach looks up current things you ask about and lists the links. Only search and page reading: the program gets nothing else on this computer. It is slower and counts against your plan\'s limits.')}>
+          <Switch checked={p.web} disabled={busy} onChange={pickWeb} label={t('Search the web')} />
+        </Row>
+      )}
+      <Row label={t('Connection')} hint={testHint} tone={(!p.models.main && canAsk) || (tests?.[0] && sub && !tests[0].ok) ? 'warn' : undefined}>
+        <button type="button" className="btn sm" {...busyProps(busy)} disabled={busy || !canAsk || !p.models.main} onClick={test}>
+          <Plug size={14} strokeWidth={1.6} /><span>{sub ? t('Test it') : t('Test the keys')}</span></button>
+      </Row>
     </div>
   )
 }

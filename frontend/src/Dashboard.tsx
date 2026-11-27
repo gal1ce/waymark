@@ -2,7 +2,7 @@ import { t as tr } from './i18n'
 import { ArrowRight, Check, Play } from 'lucide-react'
 import { api, fmtDate, fmtHours, fmtMin, weekday, weekNo } from './api'
 import type { Ctx } from './App'
-import { StuckList } from './DayView'
+import { StartNow, StuckList } from './DayView'
 import { Fig, KIND_LABEL, PageHead, Section, useLoad } from './ui'
 import { busyProps, useBusy } from './interact'
 
@@ -54,7 +54,7 @@ export default function Dashboard({ ctx }: { ctx: Ctx }) {
       ) : (
         <p className="lede">
           {open ? <><Check size={16} strokeWidth={2} className="pos" /> <b>{tr('All {n} tasks done.', { n: tasks.length })}</b> {tr("Close the day on Today when you're ready")}</>
-            : preStart ? <><b>{tr('The plan starts {day} {date}.', { day: weekday(ctx.ov!.start_date), date: fmtDate(ctx.ov!.start_date) })}</b> {tr('Days stay locked until then')}</>
+            : preStart ? <><b>{tr('The plan starts {day} {date}.', { day: weekday(ctx.ov!.start_date), date: fmtDate(ctx.ov!.start_date) })}</b> {tr('Days stay locked until then')} <StartNow ctx={ctx} /></>
               : day?.status === 'off' ? <><b>{tr('A day off.')}</b> {tr('No study today, the next day opens in the morning')}</>
                 : <>{tr('No open day for today')}</>}
         </p>

@@ -573,6 +573,19 @@ def set_plan_unit(key: str, idx: int, on: bool) -> bool:
     return True
 
 
+def set_start(d: date) -> None:
+    """The approved plan starts on day d instead (planner.start_now plans the days again)."""
+    plan = json.loads(json.dumps(db.kv_get("plan", {})))
+    old = plan.get("start_date")
+    plan["start_date"] = d.isoformat()
+    plan.setdefault("answers", {})["start_date"] = d.isoformat()
+    _retime(plan, roadmap=False)
+    db.kv_set("plan", plan)
+    profile.reload()
+    planlog.add(f"Started early: on {d.isoformat()} instead of {old}. The first days were planned again from today.", "Plan")
+    planlog.write()
+
+
 def _keep_removed(plan: dict, earlier: dict | None) -> None:
     """A changed draft keeps the units the user took out of the earlier one (matched by course and title)."""
     if not earlier:

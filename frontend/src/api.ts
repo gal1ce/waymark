@@ -362,6 +362,7 @@ export const api = {
   draftPlan: (answers: Answers) => req<Onboarding>('POST', '/onboarding/draft', { answers }),
   setExams: (dates: Record<string, string>) => req<{ notes: string[]; changed: string[] }>('PUT', '/plan/exams', { dates }),
   setDraftUnit: (track: string, unit: number, on: boolean) => req<Onboarding>('PUT', '/onboarding/unit', { track, unit, on }),
+  startNow: () => req<{ start_date: string; replanned: string[] }>('POST', '/plan/start-now'),
   setPlanUnit: (track: string, unit: number, on: boolean) => req<{ changed: boolean; replanned: string[] }>('PUT', '/plan/unit', { track, unit, on }),
   addExtraDay: (ds: string, like: number) => req<{ date: string; like: number; replanned: string[] }>('POST', `/day/${ds}/extra`, { like }),
   removeExtraDay: (ds: string) => req<{ date: string; replanned: string[] }>('DELETE', `/day/${ds}/extra`),

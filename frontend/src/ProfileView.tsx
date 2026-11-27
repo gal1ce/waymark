@@ -1,12 +1,12 @@
-import { Fragment, useState } from 'react'
+import { useState } from 'react'
 import { ChevronDown, ChevronRight, ExternalLink, ImageUp, Pencil, Plus, X } from 'lucide-react'
-import { api, fmtDate, fmtHours, MONTHS, weekNo, type Goal, type Health, type Me, type Profile } from './api'
+import { api, fmtDate, fmtHours, MONTHS, weekNo, type Goal, type Me, type Profile } from './api'
 import type { Ctx } from './App'
 import { ActivityFeed, YearGraph } from './Activity'
 import { Fig, Fold, useFold, useLoad } from './ui'
 import { busyProps, useBusy } from './interact'
 import { squareAvatar } from './picture'
-import { t, tx } from './i18n'
+import { t } from './i18n'
 
 /** GitHub-profile layout: identity and goals on the left; numbers, the year graph, activity and roadmap on the right. */
 export default function ProfileView({ ctx }: { ctx: Ctx }) {
@@ -208,70 +208,3 @@ function Goals({ goals, ctx }: { goals: Goal[]; ctx: Ctx }) {
   )
 }
 
-// shown through tx()
-const WATCH_LABEL: Record<string, string> = { watching: 'watching', waiting: 'waiting for the folder', error: 'error', restarting: 'restarting', starting: 'starting', unused: 'off (this plan has no study repo)' }
-const when = (ts: string | null | undefined) => (ts ? ts.slice(0, 16).replace('T', ' ') : t('never'))
-
-/** Everything that can go wrong without anyone noticing: paths, watcher, backups, unfinished closes, what the app wrote. */
-export function HealthPanel({ ctx }: { ctx: Ctx }) {
-  const h = useLoad(() => api.health(), [ctx.version])
-  const [busy, run] = useBusy()
-  const [data, setData] = useState<Health | null>(null)
-  const x = data ?? h
-  if (!x) return null
-  const jobs = Object.entries(x.close_jobs)
-  const ws = Object.entries(x.warnings)
-  const problems = ws.length + jobs.length + (x.watcher.state === 'watching' || x.watcher.state === 'unused' ? 0 : 1) + Object.values(x.paths).filter((p) => !p.ok).length
-  const r = x.runway
-  return (
-    <Fold title={t('Health')} meta={problems ? t('{n} to look at', { n: problems }) : t('all good')} fold="prof.health">
-      <div className="card" style={{ padding: 16 }}>
-        <dl className="health-grid">
-          <dt>{t('API key')}</dt><dd>{x.api_key ? t('set') : t('not set: built-in questions, template plans, no coach')}</dd>
-          {Object.entries(x.paths).map(([k, p]) => (
-            <Fragment key={k}><dt>{k}</dt><dd className={p.ok ? '' : 'neg'}><span className="mono">{p.path}</span>{p.ok ? '' : ` · ${t('missing')}`}</dd></Fragment>
-          ))}
-          <dt>{t('Repo watcher')}</dt><dd className={x.watcher.state === 'watching' || x.watcher.state === 'unused' ? '' : 'neg'}>{tx(WATCH_LABEL[x.watcher.state] ?? x.watcher.state)}{x.watcher.state !== 'watching' && x.watcher.state !== 'unused' && x.watcher.detail ? ` · ${x.watcher.detail}` : ''}</dd>
-          <dt>{t('Code sandbox')}</dt><dd>{x.sandbox ? t('bubblewrap (test code runs isolated)') : t('not available: test code runs with limits only')}</dd>
-          <dt>{t('Last backup')}</dt><dd>{when(x.last_backup?.ts)} · {t('{n} kept', { n: x.backups })}{x.last_backup ? <> · <span className="mono">{x.last_backup.path}</span></> : null}</dd>
-          <dt>{t('Curriculum left')}</dt><dd>{r.tracks ? r.tracks.map((x) => `${x.label} ${t('{a}/{b} units', { a: x.left, b: x.units })}`).join(' · ')
-            : <>C {t('{n} study days', { n: r.c_days ?? `${r.horizon}+` })} · Kintsugi {r.kintsugi_days ?? `${r.horizon}+`} · Khan {t('{n} units', { n: r.khan_units_left })}</>}</dd>
-          <dt>{t('Database')}</dt><dd>{t('schema v{n}', { n: x.schema_version })}{x.fake_clock ? ` · ${t('demo clock (CTU_NOW)')}` : ''}</dd>
-        </dl>
-        {jobs.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <div className="note">{t('Unfinished closes (retried every 10 minutes):')}</div>
-            <ul className="checklist">
-              {jobs.map(([ds, j]) => (
-                <li key={ds} className="no"><span><b>{ds}</b>: {j.pending.join(', ')}{Object.keys(j.errors).length ? ` · ${Object.entries(j.errors).map(([k, v]) => `${k}: ${v}`).join('; ')}` : ''} · {t('{n} tries', { n: j.attempts })}</span></li>
-              ))}
-            </ul>
-            <button className="btn sm" {...busyProps(busy)} onClick={() => run(async () => { const y = await ctx.run(api.retryCloses()); if (y) { setData(y); ctx.refresh() } })}><span>{t('Retry now')}</span></button>
-          </div>
-        )}
-        {x.phases.length > 0 && <div style={{ marginTop: 12 }}>
-          <div className="note">{t('Next phases from the COACH.md roadmap. Each one changes the plan only after you approve it; until then, finished tracks review earlier work:')}</div>
-          <ul className="checklist">
-            {x.phases.map((ph) => (
-              <li key={ph.key} className={ph.approved ? 'ok' : ''}>
-                <span style={{ flex: 1 }}><b>{ph.label}</b>{ph.approved ? ` · ${t('approved')}` : ''}. {ph.what} <span className="t3">{ph.roadmap}</span></span>
-                <button className={'btn sm' + (ph.approved ? ' ghost' : '')} {...busyProps(busy)} onClick={() => run(async () => {
-                  const y = await ctx.run(api.setPhase(ph.key, !ph.approved))
-                  if (y) { ctx.notify(ph.approved ? t('{name}: approval withdrawn', { name: ph.label }) : t('{name} approved; new days use it', { name: ph.label })); setData(null); ctx.refresh() }
-                })}><span>{ph.approved ? t('Withdraw') : t('Approve')}</span></button>
-              </li>
-            ))}
-          </ul>
-        </div>}
-        {x.external_writes.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <div className="note">{t('Files the app wrote outside its database (newest first):')}</div>
-            <ul className="checklist">
-              {x.external_writes.map((w, i) => <li key={i}><span className="mono">{when(w.ts)}</span><span>{w.action} · <span className="mono">{w.file}</span></span></li>)}
-            </ul>
-          </div>
-        )}
-      </div>
-    </Fold>
-  )
-}

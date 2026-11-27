@@ -19,7 +19,7 @@ def warn(key: str, message: str) -> None:
     log.warning("%s: %s", key, message)
     bus.publish("warning", {"key": key, "message": message})
     from . import notices
-    notices.safe_add("warning", "Needs attention", message, tone="err", link="#/settings")
+    notices.safe_add("warning", "Needs attention", message, tone="err", link="#/settings/health")
 
 
 def clear(key: str) -> None:

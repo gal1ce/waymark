@@ -4,6 +4,7 @@ import { api, type UpdateInfo, type UpdateJob } from './api'
 import { t, tx } from './i18n'
 import { Switch } from './controls'
 import { busyProps, useBusy } from './interact'
+import { Grid, Group, Row } from './settingsui'
 
 /* A newer version, told the way the app greets a new user: a whole screen on the same paper as the hello, shown when
    the app is opened (never in the middle of work). Update now (the program swaps itself and the tab reloads into the
@@ -136,7 +137,7 @@ export function UpdateSection({ onShow }: { onShow: (u: UpdateInfo) => void }) {
   const [msg, setMsg] = useState<string | null>(null)
   useEffect(() => { api.update().then(setU).catch(() => {}) }, [])
   if (!u) return null
-  if (!u.current) return <p className="set-note">{t('This copy runs from source; it is updated with git or a new package, not from here.')}</p>
+  if (!u.current) return <Grid><Group wide title={t('Running from source')} note={t('This copy runs from source; it is updated with git or a new package, not from here.')} /></Grid>
   const checkNow = () => run(async () => {
     setMsg(null)
     try {
@@ -148,18 +149,18 @@ export function UpdateSection({ onShow }: { onShow: (u: UpdateInfo) => void }) {
     } catch (e) { setMsg((e as Error).message) }
   })
   return (
-    <>
-      <p className="set-note">{t('This is Waymark {v}.', { v: u.current })}{u.checked ? ' ' + t('Last checked {d}.', { d: u.checked.replace('T', ' ').slice(0, 16) }) : ''}</p>
-      <div className="inline-form">
-        <button type="button" className="btn sm" {...busyProps(busy)} onClick={checkNow}><RefreshCw size={14} strokeWidth={1.6} /><span>{t('Check for updates')}</span></button>
-        {u.available && u.latest && <button type="button" className="btn ghost sm" onClick={() => onShow({ ...u, show: true })}><span>{t('Version {v} is ready', { v: u.latest.version })}</span></button>}
-      </div>
-      {msg && <p className="set-note">{msg}</p>}
-      <h3 className="set-sub">{t('When Waymark opens')}</h3>
-      <Switch checked={u.enabled} onChange={(on) => { api.updateSettings(on).then(setU).catch(() => {}) }}>
-        {t('Check for a new version')}
-      </Switch>
-      <p className="set-note">{t('Asks GitHub, where Waymark is published, for the latest version: at most every few hours, and nothing about you is sent.')}</p>
-    </>
+    <Grid>
+      <Group title={t('Waymark {v}', { v: u.current })} note={u.checked ? t('Last checked {d}.', { d: u.checked.replace('T', ' ').slice(0, 16) }) : undefined}
+        action={u.available && u.latest
+          ? <button type="button" className="btn primary sm" onClick={() => onShow({ ...u, show: true })}><span>{t('Version {v} is ready', { v: u.latest.version })}</span></button>
+          : <button type="button" className="btn sm" {...busyProps(busy)} onClick={checkNow}><RefreshCw size={14} strokeWidth={1.6} /><span>{t('Check for updates')}</span></button>}>
+        {msg && <p className="sg-p">{msg}</p>}
+      </Group>
+      <Group title={t('When Waymark opens')}>
+        <Row label={t('Check for a new version')} hint={t('Asks GitHub, where Waymark is published, for the latest version: at most every few hours, and nothing about you is sent.')}>
+          <Switch checked={u.enabled} onChange={(on) => { api.updateSettings(on).then(setU).catch(() => {}) }} label={t('Check for a new version')} />
+        </Row>
+      </Group>
+    </Grid>
   )
 }

@@ -706,8 +706,13 @@ async def _ensure_horizon() -> None:
             not db.q1("SELECT 1 FROM days WHERE date=?", (t.isoformat(),)):
         await _generate_reference(t)   # a plan approved on a study day starts today (the CTU plan seeds its first days)
     d = ensure_anchor()
-    if d > t and d.isoformat() in profile.extra_days() and not db.q1("SELECT 1 FROM days WHERE date=?", (d.isoformat(),)):
-        await _generate_reference(d)   # an added study day can be the anchor itself, which the loop starts after
+    # The loop below starts after the anchor, taking it as planned already. A study day ahead can be the anchor
+    # without being planned: the plan's first day when it starts later, or an added study day. It is planned first;
+    # days after it planned before it (an older version skipped it) are planned again, so the work stays in order.
+    if not profile.is_ctu() and d > t and profile.is_study_day(d) and not db.q1("SELECT 1 FROM days WHERE date=?", (d.isoformat(),)):
+        if db.q1("SELECT 1 FROM days WHERE status='planned' AND date>?", (d.isoformat(),)):
+            _drop_ahead(d)
+        await _generate_reference(d)
     for _ in range(HORIZON_STUDY_DAYS):
         d = next_study_day(d)
         ds = d.isoformat()
@@ -756,6 +761,27 @@ async def set_unit(track: str, idx: int, on: bool) -> dict:
     for ds in dropped:
         bus.publish("plan", {"date": ds})
     return {"changed": changed, "replanned": dropped}
+
+
+async def start_now() -> dict:
+    """A plan of the user's own that starts on a later day starts today instead: its start moves to today and the days
+    planned ahead are planned again from it, so the first work comes today and every day after moves up. A today the
+    plan has off becomes a one-off study day."""
+    from . import onboarding
+    if profile.key() != "custom":
+        raise state.Refused("Starting early is for a plan of your own.")
+    t = today()
+    if t >= start_date():
+        raise state.Refused("The plan has started already.")
+    async with _lock:
+        onboarding.set_start(t)
+        dropped = _drop_ahead(t)
+        if t.weekday() not in study_weekdays():
+            db.kv_set("extra_days", {**profile.extra_days(), t.isoformat(): sorted(study_weekdays())[0]})
+        await _ensure_horizon()
+    for ds in [t.isoformat(), *dropped]:
+        bus.publish("plan", {"date": ds})
+    return {"start_date": t.isoformat(), "replanned": dropped}
 
 
 # ------------------------------------------------------------------ one-off study days
