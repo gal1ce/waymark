@@ -142,12 +142,31 @@ def split_calls(text: str) -> tuple[str, list[dict]]:
     return text[:i].rstrip(), calls
 
 
+# ------------------------------------------------------------------ searching the web
+# A subscription may search the web with its program's own tools, where the caller asks for it (the plan draft, the
+# coach chat) and the user left it on (Settings → AI providers). Only these tools: nothing that touches the computer.
+WEB_TOOLS = {"claude_code": ("WebSearch", "WebFetch"), "gemini_cli": ("google_web_search", "web_fetch")}
+WEB_WAIT = 90   # seconds more before a silent run counts as stalled: a search or a page read writes nothing meanwhile
+
+
+def web_note(schema: dict | None) -> str:
+    return ("## Searching the web\nYou can search the web and read pages. Use it when the answer depends on current or "
+            "outside facts (courses and their pages, books and editions, dates, versions, whether a source exists); "
+            "don't search for what you already know well. Never cite a page you didn't open or find. " +
+            ("Put what you found into the JSON only; nothing outside it." if schema else
+             "When you used it, end the reply with the links you used, as a short list."))
+
+
 # ------------------------------------------------------------------ Claude Code
-def _claude_argv(exe: str, model: str, system: str, effort: str, schema: dict | None) -> tuple[list[str], bool]:
+def _claude_argv(exe: str, model: str, system: str, effort: str, schema: dict | None,
+                 web: bool = False) -> tuple[list[str], bool]:
     """(the command, whether the system prompt went on it)."""
+    tools = ",".join(WEB_TOOLS["claude_code"]) if web else ""
     argv = [exe, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-            "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--safe-mode", "--disable-slash-commands",
+            "--tools", tools, "--strict-mcp-config", "--setting-sources", "", "--safe-mode", "--disable-slash-commands",
             "--no-session-persistence", "--model", model]
+    if web:   # allowed ahead: a run without a terminal can't be asked
+        argv += ["--allowedTools", " ".join(WEB_TOOLS["claude_code"])]
     if effort in EFFORTS:
         argv += ["--effort", effort]
     if schema:
@@ -230,26 +249,34 @@ def _cmd_wrapper(exe: str) -> bool:
     return exe.lower().endswith((".cmd", ".bat"))
 
 
-async def _claude(exe, model, system, messages, tools, effort, schema, stall) -> AsyncIterator[tuple[str, Any]]:
-    """Yields ("text", delta), ("json", delta) for structured output, then ("final", (text, stop, refusal))."""
-    sys_text = system_text(system, tools)
-    argv, on_line = _claude_argv(exe, model, sys_text, effort, schema)
+async def _claude(exe, model, system, messages, tools, effort, schema, stall, web=False) -> AsyncIterator[tuple[str, Any]]:
+    """Yields ("text", delta), ("json", delta) for structured output, ("web", tool) when it searches the web or reads a
+    page (what it wrote before that is not part of the reply), then ("final", (text, stop, refusal))."""
+    sys_text = "\n\n".join(x for x in (system_text(system, tools), web_note(schema) if web else "") if x)
+    argv, on_line = _claude_argv(exe, model, sys_text, effort, schema, web)
     body = prompt(messages)
     if sys_text and not on_line:
         body = f"<instructions>\n{sys_text}\n</instructions>\n\n{body}"
     run = _Run(argv, _env(_API_AUTH), body, stall)
-    text, stop, limit, result = "", None, None, None
+    text, stop, limit, result, block = "", None, None, None, ""
     async for ev in run.events():
         t = ev.get("type")
         if t == "stream_event":
             e = ev.get("event") or {}
-            if e.get("type") == "content_block_delta":
+            if e.get("type") == "content_block_start":
+                cb = e.get("content_block") or {}
+                block = str(cb.get("name") or "") if cb.get("type") in ("tool_use", "server_tool_use") else ""
+                if block in WEB_TOOLS["claude_code"]:
+                    text = ""   # what it said before searching ("Let me look that up") isn't the reply
+                    yield "web", block
+            elif e.get("type") == "content_block_delta":
                 d = e.get("delta") or {}
                 if d.get("type") == "text_delta" and d.get("text"):
                     text += d["text"]
                     run.said = True
                     yield "text", d["text"]
-                elif d.get("type") == "input_json_delta" and schema and d.get("partial_json"):
+                elif (d.get("type") == "input_json_delta" and schema and d.get("partial_json")
+                      and block not in WEB_TOOLS["claude_code"]):   # a search's own query isn't the JSON reply
                     run.said = True
                     yield "json", d["partial_json"]
             elif e.get("type") == "message_delta":
@@ -275,6 +302,8 @@ async def _claude(exe, model, system, messages, tools, effort, schema, stall) ->
 # Its own tools are switched off by an allowlist that names no tool; MCP servers by allowing none by name. These go in
 # workspace settings of the run's own folder, which the program reads on top of the user's (sign-in included).
 _GEMINI_SETTINGS = {"tools": {"core": ["none"]}, "mcp": {"allowed": ["none"]}, "model": {"maxSessionTurns": 4}}
+# with the web: its search and page reading only, and turns for a few of them
+_GEMINI_WEB = {**_GEMINI_SETTINGS, "tools": {"core": list(WEB_TOOLS["gemini_cli"])}, "model": {"maxSessionTurns": 12}}
 # keys that would make the Gemini CLI bill an API key instead of the Google account it is signed in with
 _GEMINI_AUTH = ("GEMINI_API_KEY", "GEMINI_API_KEYS", "GOOGLE_API_KEY", "GOOGLE_GENAI_USE_VERTEXAI",
                 "GOOGLE_GENAI_USE_GCA", "GEMINI_SYSTEM_MD")
@@ -303,19 +332,22 @@ def schema_guide(schema: dict | None) -> str:
             "before or after it, no code fence.\n" + json.dumps(schema, ensure_ascii=False, separators=(",", ":")))
 
 
-async def _gemini(exe, model, system, messages, tools, effort, schema, stall) -> AsyncIterator[tuple[str, Any]]:
+async def _gemini(exe, model, system, messages, tools, effort, schema, stall, web=False) -> AsyncIterator[tuple[str, Any]]:
     """Yields ("text", delta) (JSON text too, when a schema was asked for), then ("final", (text, stop, refusal)).
     Each run gets a folder of its own holding the system prompt and .gemini/settings.json (the program reads workspace
     settings from the folder it runs in; a system settings file elsewhere is refused unless root owns it)."""
     import shutil
-    sys_text = "\n\n".join(x for x in (system_text(system, tools), schema_guide(schema)) if x)
+    sys_text = "\n\n".join(x for x in (system_text(system, tools), schema_guide(schema), web_note(schema) if web else "")
+                         if x)
     here = _workdir() / ("gemini-" + uuid.uuid4().hex[:12])
     (here / ".gemini").mkdir(parents=True)
     sys_file = here / ".gemini" / "system.md"
     sys_file.write_text(sys_text or "You are a helpful assistant.", encoding="utf-8")
-    (here / ".gemini" / "settings.json").write_text(json.dumps(_GEMINI_SETTINGS), encoding="utf-8")
+    (here / ".gemini" / "settings.json").write_text(json.dumps(_GEMINI_WEB if web else _GEMINI_SETTINGS), encoding="utf-8")
     argv = [exe, "--output-format", "stream-json", "--skip-trust", "--allowed-mcp-server-names", "none", "-m", model,
             "-p", "Reply to the input above."]   # plain words: safe on a Windows .cmd wrapper's command line
+    if web:   # approves the tools without asking; the settings above leave it only search and page reading
+        argv[-2:-2] = ["--approval-mode", "yolo"]
     env = _env(_GEMINI_AUTH, GEMINI_SYSTEM_MD=str(sys_file))
     run = _Run(argv, env, prompt(messages), stall, cwd=here)
     text, result, errors = "", None, []
@@ -329,8 +361,13 @@ async def _gemini(exe, model, system, messages, tools, effort, schema, stall) ->
             elif t == "error":
                 if ev.get("severity") == "error":
                     errors.append(str(ev.get("message") or ""))
-            elif t == "tool_use":   # every tool is off, so this means the switches above stopped working
-                errors.append(f"the program tried to use its own tool {ev.get('tool_name') or ''}")
+            elif t == "tool_use":
+                name = str(ev.get("tool_name") or "")
+                if web and name in WEB_TOOLS["gemini_cli"]:
+                    text = ""   # what it said before searching isn't the reply
+                    yield "web", name
+                else:   # every other tool is off, so this means the switches above stopped working
+                    errors.append(f"the program tried to use its own tool {name}")
             elif t == "result":
                 result = ev
     finally:
@@ -363,20 +400,29 @@ _RUNNERS = {"claude_code": _claude, "gemini_cli": _gemini}
 
 
 async def stream(pid: str, key: str, model: str, *, system, messages, tools=None, effort="medium", max_tokens=16000,
-                 schema=None):
+                 schema=None, web=False):
     """Yields ("text", delta) and ("tool", name), then ("final", response), like oai.stream. max_tokens is the
-    program's business."""
+    program's business. web: the caller lets it search the web; it does when the user left that on. Then a search
+    yields ("tool", "web_search"), after ("restart", why) when words of the reply had gone out already."""
     exe = providers.installed(pid)
     if not exe:
         raise CallError("request", f"the {PROVIDERS[pid].command} program isn't installed on this computer")
-    stall = oai.stall_sec(pid, effort) + 15   # the program itself takes a few seconds to start
-    vis, out = Visible(), None
-    async for kind, val in _RUNNERS[pid](exe, model, system, messages, None if schema else tools, effort, schema, stall):
-        if kind == "json" or kind == "text" and schema:
+    web = bool(web) and providers.web_on(pid)
+    stall = oai.stall_sec(pid, effort) + 15 + (WEB_WAIT if web else 0)   # the program itself takes a few seconds to start
+    vis, out, shown = Visible(), None, False
+    async for kind, val in _RUNNERS[pid](exe, model, system, messages, None if schema else tools, effort, schema, stall, web):
+        if kind == "web":
+            if shown:
+                yield "restart", "Searching the web"
+            vis, shown = Visible(), False
+            yield "tool", "web_search"
+        elif kind == "json" or kind == "text" and schema:
+            shown = True
             yield "text", val
         elif kind == "text":
-            if shown := vis.feed(val):
-                yield "text", shown
+            if seen := vis.feed(val):
+                shown = True
+                yield "text", seen
         else:
             out = val
     text, stop, refused = out

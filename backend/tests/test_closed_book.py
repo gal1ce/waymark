@@ -75,3 +75,22 @@ def test_closed_book_turn_has_no_tools_no_today_block_and_the_rules(seeded, monk
     day = agent.prepare(None, False)
     _run("hi", day, False)
     assert seen[0]["tools"] and "[TODAY]" in _sent(seen[0])
+
+
+def test_the_coach_may_search_the_web_but_never_during_a_graded_test(seeded, monkeypatch):
+    """An ordinary turn runs inside llm.web_search() (a subscription may look current things up); a closed-book
+    turn never does, so a test's answers can't be looked up on the web. A search shows as a status line."""
+    set_now("2026-11-23T14:00")
+    web = []
+
+    async def stream(*, system, messages, tools=None, **kw):
+        web.append(llm._WEB.get())
+        yield "tool", "web_search"
+        yield "text", "Found it."
+        yield "final", SimpleNamespace(content=[_block("Found it.")], stop_reason="end_turn")
+    monkeypatch.setattr(llm, "stream", stream)
+    evs = _run("Is there a newer edition of Abbott?", agent.prepare(None, False), False)
+    assert web == [True]
+    assert {"type": "status", "phase": "tool", "tool": "web_search", "label": "Searching the web"} in evs
+    _run("What was the rule for ax + b = cx + d?", agent.prepare(None, False, closed=True), True)
+    assert web == [True, False]

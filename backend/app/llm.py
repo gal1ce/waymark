@@ -9,6 +9,8 @@ nothing answers, the error says, per provider and key, what went wrong."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import contextvars
 import json
 import re
 import time
@@ -196,8 +198,27 @@ def _stamp(resp, pid: str, model: str) -> Any:
     return resp
 
 
+# Work that may search the web runs inside web_search(): a subscription then uses its program's own search
+# (cli.stream, when the user left it on); the other providers have no such tool here. A context, not an argument,
+# so the call surface stays as it is.
+_WEB: contextvars.ContextVar[bool] = contextvars.ContextVar("llm_web", default=False)
+
+
+@contextlib.contextmanager
+def web_search():
+    token = _WEB.set(True)
+    try:
+        yield
+    finally:
+        try:
+            _WEB.reset(token)
+        except ValueError:   # closed from another context (a stream cancelled midway): that one never searched
+            pass
+
+
 async def create(*, system: Any, messages: list, tools: list | None = None, effort: str = "medium",
                  max_tokens: int = 16000, schema: dict | None = None, role: str = "main"):
+    web = _WEB.get()
     run = _Run(role)
     attempts = list(run.attempts())
     busy_left = {pid: len(BUSY_WAIT) for pid in PROVIDERS}
@@ -209,7 +230,8 @@ async def create(*, system: Any, messages: list, tools: list | None = None, effo
             i += 1
             continue
         call = _anthropic_create if PROVIDERS[pid].kind == "anthropic" else (
-            lambda k, m, **kw: (cli if PROVIDERS[pid].kind == "cli" else oai).create(pid, k, m, **kw))
+            (lambda k, m, **kw: cli.create(pid, k, m, web=web, **kw)) if PROVIDERS[pid].kind == "cli" else
+            (lambda k, m, **kw: oai.create(pid, k, m, **kw)))
         try:
             resp = await call(key, model, system=system, messages=messages, tools=tools, effort=providers.effort(pid, effort, role),
                               max_tokens=max_tokens, schema=schema)
@@ -241,6 +263,7 @@ async def stream(*, system: Any, messages: list, tools: list | None = None, effo
     ("text", delta) and ("tool", name) while it writes, then ("final", response). `model` is ignored (kept so old
     callers don't break); the model comes from Settings → AI providers."""
     run = _Run(role)
+    web = _WEB.get()   # read once: the generator may be resumed elsewhere
     attempts = list(run.attempts())
     busy_left = {pid: len(BUSY_WAIT) for pid in PROVIDERS}
     dead: set[str] = set()
@@ -260,7 +283,10 @@ async def stream(*, system: Any, messages: list, tools: list | None = None, effo
         gen = (_anthropic_stream(key, mdl, system=system, messages=messages, tools=tools, effort=eff,
                                  max_tokens=max_tokens, schema=schema)
                if PROVIDERS[pid].kind == "anthropic" else
-               (cli if PROVIDERS[pid].kind == "cli" else oai).stream(pid, key, mdl, system=system, messages=messages, tools=tools, effort=eff,
+               cli.stream(pid, key, mdl, system=system, messages=messages, tools=tools, effort=eff, max_tokens=max_tokens,
+                          schema=schema, web=web)
+               if PROVIDERS[pid].kind == "cli" else
+               oai.stream(pid, key, mdl, system=system, messages=messages, tools=tools, effort=eff,
                           max_tokens=max_tokens, schema=schema))
         emitted, resp = False, None
         try:

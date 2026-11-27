@@ -89,7 +89,7 @@ def _defaults() -> dict:
     .env (it holds keys only)."""
     models = {pid: {"main": p.main, "chat": p.chat} for pid, p in PROVIDERS.items()}
     return {"order": list(ORDER), "fallback": False, "models": models, "local_url": PROVIDERS["local"].base,
-            "local_on": False, "cli_on": {pid: False for pid in CLI}, "effort": {}}
+            "local_on": False, "cli_on": {pid: False for pid in CLI}, "effort": {}, "web": {pid: True for pid in CLI}}
 
 
 def settings() -> dict:
@@ -112,9 +112,17 @@ def settings() -> dict:
     for pid, on in (s.get("cli_on") or {}).items():
         if pid in d["cli_on"]:
             d["cli_on"][pid] = bool(on)
+    for pid, on in (s.get("web") or {}).items():
+        if pid in d["web"]:
+            d["web"][pid] = bool(on)
     # the user's effort for tests and plans, per provider; none stored = each task's own (see effort())
     d["effort"] = {pid: v for pid, v in (s.get("effort") or {}).items() if v in EFFORT_LEVELS.get(pid, [])}
     return d
+
+
+def web_on(pid: str) -> bool:
+    """Whether this subscription may search the web where the app lets it (on unless the user switched it off)."""
+    return bool(settings()["web"].get(pid))
 
 
 def effort(pid: str, asked: str, role: str = "main") -> str:
@@ -142,7 +150,8 @@ def _stored_models(models: dict) -> dict:
 
 def save_settings(order: list[str] | None = None, fallback: bool | None = None, models: dict | None = None,
                   local_url: str | None = None, local_on: bool | None = None,
-                  cli_on: dict[str, bool] | None = None, effort: dict[str, str] | None = None) -> dict:
+                  cli_on: dict[str, bool] | None = None, effort: dict[str, str] | None = None,
+                  web: dict[str, bool] | None = None) -> dict:
     s = settings()
     if order is not None:
         bad = [p for p in order if p not in PROVIDERS]
@@ -171,6 +180,10 @@ def save_settings(order: list[str] | None = None, fallback: bool | None = None, 
         if pid not in CLI:
             raise SetupError(f"Unknown provider: {pid}.")
         s["cli_on"][pid] = bool(on)
+    for pid, on in (web or {}).items():
+        if pid not in CLI:
+            raise SetupError(f"{PROVIDERS[pid].label if pid in PROVIDERS else pid} can't search the web here.")
+        s["web"][pid] = bool(on)
     for pid, v in (effort or {}).items():
         if pid not in PROVIDERS:
             raise SetupError(f"Unknown provider: {pid}.")
@@ -369,6 +382,7 @@ def view() -> dict:
                     "base": base(pid), "kind": p.kind, "command": p.command,
                     "on": bool(s["cli_on"].get(pid)) if p.kind == "cli" else None,
                     "installed": bool(installed(pid)) if p.kind == "cli" else None,
-                    "effort": s["effort"].get(pid, ""), "effort_levels": EFFORT_LEVELS.get(pid, [])})
+                    "effort": s["effort"].get(pid, ""), "effort_levels": EFFORT_LEVELS.get(pid, []),
+                    "web": bool(s["web"].get(pid)) if p.kind == "cli" else None})
     return {"providers": out, "fallback": s["fallback"], "local_url": s["local_url"], "local_on": s["local_on"],
             "primary": prim, "env_file": str(envfile.path())}

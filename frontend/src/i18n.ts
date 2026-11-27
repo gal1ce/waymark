@@ -101,8 +101,8 @@ const TR = {
     'Bu uygulamanın bu bilgisayara kaydettiği her şeyi, otomatik yedekler dahil siler: uygulama kurulduğu günkü haline döner. Uygulamanın kendisi, indirilen Khan içeriği ve veri klasörü dışındaki dosyaların kalır. Bu geri alınamaz.',
   'Not installed': 'Kurulu değil', 'Test it': 'Dene', 'Switch it on to pick a model.': 'Model seçmek için aç.',
   'Use my subscription through the {c} program': 'Aboneliğimi {c} programı üzerinden kullan',
-  'Sign in once: run {c} in a terminal and log in with your account. The app runs it in the background with its own tools switched off; API keys in .env are not passed to it.':
-    'Bir kez giriş yap: terminalde {c} komutunu çalıştır ve hesabınla oturum aç. Uygulama onu arka planda, kendi araçları kapalı çalıştırır; .env\'deki API anahtarları ona verilmez.',
+  'Sign in once: run {c} in a terminal and log in with your account. The app runs it in the background with its own tools switched off, apart from web search when that is on; API keys in .env are not passed to it.':
+    'Bir kez giriş yap: terminalde {c} komutunu çalıştır ve hesabınla oturum aç. Uygulama onu arka planda, kendi araçları kapalı çalıştırır (açıksa internette arama hariç); .env\'deki API anahtarları ona verilmez.',
   'The {c} program isn\'t installed on this computer. Install it, sign in once, then switch this on.':
     '{c} programı bu bilgisayarda kurulu değil. Kur, bir kez giriş yap, sonra bunu aç.',
   'Writes the tests, grades them and drafts plans: pick a strong one.': 'Testleri yazar, puanlar ve planları hazırlar: güçlü bir model seç.',
@@ -237,6 +237,12 @@ const TR = {
   '{p} takes no effort setting: its models think as they are made to.': '{p} düşünme düzeyi ayarı almıyor: modelleri kendi varsayılanıyla düşünür.',
   '{p} now thinks at {e} for tests and plans.': '{p} testler ve planlar için artık {e} düzeyde düşünüyor.', "{p} uses each task's own effort again.": '{p} yeniden her işin kendi düzeyini kullanıyor.',
   'Deeper': 'Daha derin', 'Max': 'En derin',
+  // searching the web (subscriptions)
+  'Search the web': 'İnternette ara', '{n} web searches so far': 'şimdiye kadar {n} web araması',
+  "While drafting a plan it looks up real, current courses and sources; the coach looks up current things you ask about and lists the links. Only search and page reading: the program gets nothing else on this computer. It is slower and counts against your plan's limits.":
+    'Plan taslağı yazarken gerçek ve güncel kursları ve kaynakları arar; koç da sorduğun güncel şeylere bakar ve linklerini verir. Yalnızca arama ve sayfa okuma: program bu bilgisayarda başka hiçbir şeye erişmez. Daha yavaştır ve planının limitinden düşer.',
+  '{p} may search the web for plans and the coach.': '{p} artık planlar ve koç için internette arayabilir.', '{p} no longer searches the web.': '{p} artık internette aramıyor.',
+  'Searching the web': 'İnternette arıyor',
   'Fast: answers in seconds, fine for most questions.': 'Hızlı: saniyeler içinde cevaplar, çoğu soru için yeterli.',
   'Balanced: thinks longer, better for tricky concepts.': 'Dengeli: daha uzun düşünür, zor kavramlar için daha iyi.',
   'Deep: slowest, for hard debugging or long explanations.': 'Derin: en yavaşı; zor hata ayıklama ya da uzun açıklamalar için.',

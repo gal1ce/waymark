@@ -174,7 +174,7 @@ export type Answers = {
 export type Onboarding = {
   status: 'idle' | 'drafting' | 'ready' | 'failed'; plan: PlanInfo['key']; has_api_key: boolean
   /** while drafting: how far the model is (read off its stream); elapsed seconds on the server's own clock */
-  progress?: { phase: 'thinking' | 'writing' | 'checking'; elapsed: number; chars: number; units: number; tracks: string[] }
+  progress?: { phase: 'thinking' | 'writing' | 'checking'; elapsed: number; chars: number; units: number; tracks: string[]; searches?: number }
   answers?: Partial<Answers>; draft?: { plan: DraftPlan; notes: string[]; at: string } | null; error?: string | null; change?: string
   started?: string
 }
@@ -188,10 +188,12 @@ export type AiProvider = {
   kind: 'anthropic' | 'openai' | 'cli'; command: string; on: boolean | null; installed: boolean | null
   /** the thinking effort for tests and plans ('' = each task's own) and the levels this provider takes (none: it sends no effort) */
   effort: Effort | ''; effort_levels: Effort[]
+  /** a subscription: may it search the web (plan drafts, the coach chat); null for the others */
+  web: boolean | null
 }
 export type AiModel = { id: string; name: string; context: number; free: boolean; price: string; chat: boolean; created: number }
 export type AiView = { providers: AiProvider[]; fallback: boolean; local_url: string; local_on: boolean; primary: string | null; env_file: string }
-export type AiPut = { order?: string[]; fallback?: boolean; models?: Record<string, Partial<{ main: string; chat: string }>>; effort?: Record<string, Effort | ''>; local_url?: string; local_on?: boolean
+export type AiPut = { order?: string[]; fallback?: boolean; models?: Record<string, Partial<{ main: string; chat: string }>>; effort?: Record<string, Effort | ''>; web?: Record<string, boolean>; local_url?: string; local_on?: boolean
   cli_on?: Record<string, boolean> }
 
 // Khan content (Kolibri): unit outline, videos, exercises in Perseus format, the in-app unit test

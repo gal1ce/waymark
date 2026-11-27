@@ -318,6 +318,23 @@ if mode == "limit":
 elif mode == "schema":
     out({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "input_json_delta", "partial_json": "{\"q\": 1}"}}})
     out({"type": "result", "subtype": "success", "is_error": False, "stop_reason": "tool_use", "structured_output": {"q": 1}})
+elif mode in ("web", "webschema"):   # as Claude Code writes a turn that searches first (seen from the real program)
+    def start(block): out({"type": "stream_event", "event": {"type": "content_block_start", "content_block": block}})
+    def js(t): out({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "input_json_delta", "partial_json": t}}})
+    text("Let me look that up.")
+    start({"type": "tool_use", "id": "t1", "name": "WebSearch", "input": {}})
+    js('{"query": "python latest"}')
+    out({"type": "stream_event", "event": {"type": "message_delta", "delta": {"stop_reason": "tool_use"}}})
+    out({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "Links: ..."}]}})
+    if mode == "webschema":
+        start({"type": "tool_use", "id": "t2", "name": "StructuredOutput", "input": {}})
+        js('{"q": 2}')
+        out({"type": "result", "subtype": "success", "is_error": False, "stop_reason": "tool_use", "structured_output": {"q": 2}})
+    else:
+        start({"type": "text", "text": ""})
+        text("Python 3.15 [python.org](https://python.org).")
+        out({"type": "stream_event", "event": {"type": "message_delta", "delta": {"stop_reason": "end_turn"}}})
+        out({"type": "result", "subtype": "success", "is_error": False, "stop_reason": "end_turn"})
 else:
     if "<tool_result" in prompt:
         text("You did 3 of 4.")
@@ -417,6 +434,12 @@ out({"type": "init", "model": "x"})
 if mode == "quota":
     out({"type": "error", "severity": "error", "message": "RESOURCE_EXHAUSTED: quota exceeded"})
     out({"type": "result", "status": "error", "error": {"type": "x", "message": "429"}})
+elif mode == "web":
+    out({"type": "message", "role": "assistant", "content": "Let me search.", "delta": True})
+    out({"type": "tool_use", "tool_name": "google_web_search", "tool_id": "g1", "parameters": {"query": "x"}})
+    out({"type": "tool_result", "tool_id": "g1", "status": "success", "output": "..."})
+    out({"type": "message", "role": "assistant", "content": "Found it: https://example.org", "delta": True})
+    out({"type": "result", "status": "success"})
 elif mode == "schema":
     for p in ['```json\n{"q"', ': 1}\n```']:
         out({"type": "message", "role": "assistant", "content": p, "delta": True})
@@ -529,3 +552,72 @@ def test_the_effort_for_tests_and_plans_can_be_set_per_provider(env, monkeypatch
     asyncio.run(llm.create(system="s", messages=[{"role": "user", "content": "hi"}], effort="low"))
     assert sent == ["high"]
     assert llm._kwargs("claude-opus-5-5", "s", [], None, "xhigh", 10, None)["output_config"]["effort"] == "xhigh"
+
+
+
+def _run_chat(web: bool):
+    async def go():
+        if web:
+            with llm.web_search():
+                return [e async for e in llm.stream(system="coach", messages=[{"role": "user", "content": "q"}], role="chat")]
+        return [e async for e in llm.stream(system="coach", messages=[{"role": "user", "content": "q"}], role="chat")]
+    return asyncio.run(go())
+
+
+def test_a_claude_subscription_searches_the_web_only_where_the_app_lets_it(fake_claude, monkeypatch):
+    """Inside web_search() and with the switch on (the default), Claude Code gets its search and page reading tools and
+    nothing else; what it said before searching is taken back and the reply is what it wrote after."""
+    providers.save_settings(order=["claude_code"], cli_on={"claude_code": True})
+    assert providers.web_on("claude_code")
+    _run_chat(web=False)
+    argv = fake_claude()[-1]["argv"]
+    assert argv[argv.index("--tools") + 1] == "" and "--allowedTools" not in argv     # tests, grading, days: no web
+
+    monkeypatch.setenv("FAKE_MODE", "web")
+    evs = _run_chat(web=True)
+    call = fake_claude()[-1]
+    argv = call["argv"]
+    assert argv[argv.index("--tools") + 1] == "WebSearch,WebFetch"
+    assert argv[argv.index("--allowedTools") + 1] == "WebSearch WebFetch"
+    assert "Searching the web" in call["prompt"] + " ".join(argv)            # it is told when and how to use it
+    kinds = [k for k, _v in evs]
+    assert ("tool", "web_search") in evs and kinds.index("restart") < kinds.index("tool")
+    assert llm.text_of(evs[-1][1]) == "Python 3.15 [python.org](https://python.org)."
+
+    providers.save_settings(web={"claude_code": False})                     # switched off: no tools again
+    _run_chat(web=True)
+    argv = fake_claude()[-1]["argv"]
+    assert argv[argv.index("--tools") + 1] == "" and not providers.view()["providers"][0]["web"]
+
+
+def test_a_search_query_is_not_taken_for_the_json_reply(fake_claude, monkeypatch):
+    providers.save_settings(order=["claude_code"], cli_on={"claude_code": True})
+    monkeypatch.setenv("FAKE_MODE", "webschema")
+    shown = []
+
+    async def go():
+        with llm.web_search():
+            return await llm.structured_live("s", "p", {"type": "object", "properties": {"q": {"type": "integer"}}},
+                                             lambda k, v: shown.append((k, v)))
+    assert asyncio.run(go()) == {"q": 2}
+    assert not any("query" in str(v) for k, v in shown if k == "text")       # the search's input never shows as the draft
+
+
+def test_the_gemini_cli_searches_with_only_its_web_tools(fake_gemini, monkeypatch):
+    monkeypatch.setenv("FAKE_MODE", "web")
+    evs = _run_chat(web=True)
+    call = fake_gemini()[-1]
+    assert call["settings"]["tools"]["core"] == ["google_web_search", "web_fetch"]
+    assert call["argv"][call["argv"].index("--approval-mode") + 1] == "yolo"
+    assert "Searching the web" in call["system"]
+    assert ("tool", "web_search") in evs and llm.text_of(evs[-1][1]) == "Found it: https://example.org"
+    _run_chat(web=False)                                                     # outside web_search(): every tool off
+    call = fake_gemini()[-1]
+    assert call["settings"]["tools"]["core"] == ["none"] and "--approval-mode" not in call["argv"]
+
+
+def test_only_a_subscription_has_the_web_switch(env):
+    with pytest.raises(providers.SetupError):
+        providers.save_settings(web={"anthropic": True})
+    v = {p["id"]: p for p in providers.view()["providers"]}
+    assert v["anthropic"]["web"] is None and v["gemini_cli"]["web"] is True

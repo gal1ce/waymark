@@ -108,7 +108,7 @@ export function Thinking({ phase, label, since, name }: { phase: Draft['phase'];
   }, [reduce, phase])
   useEffect(() => { const i = setInterval(() => setNow((x) => x + 1), 1000); return () => clearInterval(i) }, [])
   const secs = Math.max(0, Math.floor((Date.now() - since) / 1000))
-  const text = phase === 'thinking' || phase === 'writing' ? (reduce ? tx('Thinking') : tx(VERBS[v])) : (label ?? tx('Working'))
+  const text = phase === 'thinking' || phase === 'writing' ? (reduce ? tx('Thinking') : tx(VERBS[v])) : (label ? tx(label) : tx('Working'))
   const real = phase === 'tool' || phase === 'running'
   return (
     <div className={'thinking' + (real ? ' real' : '')} role="status">

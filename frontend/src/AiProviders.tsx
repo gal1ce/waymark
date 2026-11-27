@@ -278,6 +278,10 @@ function ProviderBody({ p, view, ctx, setV }: { p: AiProvider; view: AiView; ctx
     const r = await ctx.run(api.aiPut({ effort: { [p.id]: e } }))
     if (r) { setV(r); ctx.notify(e ? t('{p} now thinks at {e} for tests and plans.', { p: p.label, e: t(EFFORT_NAME[e]) }) : t('{p} uses each task\'s own effort again.', { p: p.label }), 'ok') }
   })
+  const pickWeb = (on: boolean) => run(async () => {
+    const r = await ctx.run(api.aiPut({ web: { [p.id]: on } }))
+    if (r) { setV(r); ctx.notify(on ? t('{p} may search the web for plans and the coach.', { p: p.label }) : t('{p} no longer searches the web.', { p: p.label }), 'ok') }
+  })
   const test = () => run(async () => {
     const r = await ctx.run(api.aiTest(p.id))
     if (r) { setV(r); setTests(Object.fromEntries(r.results.map((x) => [x.index, x]))) }
@@ -303,7 +307,7 @@ function ProviderBody({ p, view, ctx, setV }: { p: AiProvider; view: AiView; ctx
         <div className="ai-local">
           <Switch checked={!!p.on} disabled={busy || !p.installed} onChange={(on) => run(async () => { const r = await ctx.run(api.aiPut({ cli_on: { [p.id]: on } })); if (r) { setV(r); setTests(null) } })}>{t('Use my subscription through the {c} program', { c: p.command })}</Switch>
           <p className="field-h">{p.installed
-            ? t('Sign in once: run {c} in a terminal and log in with your account. The app runs it in the background with its own tools switched off; API keys in .env are not passed to it.', { c: p.command })
+            ? t('Sign in once: run {c} in a terminal and log in with your account. The app runs it in the background with its own tools switched off, apart from web search when that is on; API keys in .env are not passed to it.', { c: p.command })
             : t('The {c} program isn\'t installed on this computer. Install it, sign in once, then switch this on.', { c: p.command })}</p>
           {tests?.[0] && <p className={'ai-key-st ' + (tests[0].ok ? 'ok' : 'bad')}>{tests[0].ok ? <><Check size={13} strokeWidth={2} />{t('Works')}</> : <><CircleAlert size={13} strokeWidth={1.8} />{tests[0].reason}</>}</p>}
         </div>
@@ -352,6 +356,12 @@ function ProviderBody({ p, view, ctx, setV }: { p: AiProvider; view: AiView; ctx
           <span className="field-h">{t('Writes the tests, grades them and drafts plans: pick a strong one.')}{p.default_models.main && p.models.main !== p.default_models.main
             ? <>{' '}<button type="button" className="linkish" onClick={() => pickModel('main', p.default_models.main)}>{t('Back to the default ({m})', { m: p.default_models.main })}</button></> : null}</span>
         </div>
+        {p.web !== null && (
+          <div className="field">
+            <Switch checked={p.web} disabled={busy} onChange={pickWeb}>{t('Search the web')}</Switch>
+            <span className="field-h">{t('While drafting a plan it looks up real, current courses and sources; the coach looks up current things you ask about and lists the links. Only search and page reading: the program gets nothing else on this computer. It is slower and counts against your plan\'s limits.')}</span>
+          </div>
+        )}
         <div className="field">
           <span className="field-l">{t('Thinking effort for tests and plans')}</span>
           {p.effort_levels.length > 0 ? (<>
