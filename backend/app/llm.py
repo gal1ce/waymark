@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from typing import Any, AsyncIterator
 
@@ -60,7 +61,13 @@ def _anthropic(key: str) -> anthropic.AsyncAnthropic:
     return c
 
 
+# models that take effort only up to max without xhigh (xhigh came with Opus 4.7)
+_NO_XHIGH = re.compile(r"claude-(opus|sonnet)-4-[0-6]\b")
+
+
 def _kwargs(model, system, messages, tools, effort, max_tokens, schema) -> dict[str, Any]:
+    if effort == "xhigh" and _NO_XHIGH.search(model):
+        effort = "high"
     output_config: dict[str, Any] = {"effort": effort}
     if schema:
         output_config["format"] = {"type": "json_schema", "schema": schema}
@@ -204,7 +211,7 @@ async def create(*, system: Any, messages: list, tools: list | None = None, effo
         call = _anthropic_create if PROVIDERS[pid].kind == "anthropic" else (
             lambda k, m, **kw: (cli if PROVIDERS[pid].kind == "cli" else oai).create(pid, k, m, **kw))
         try:
-            resp = await call(key, model, system=system, messages=messages, tools=tools, effort=effort,
+            resp = await call(key, model, system=system, messages=messages, tools=tools, effort=providers.effort(pid, effort, role),
                               max_tokens=max_tokens, schema=schema)
         except CallError as e:
             if e.kind == "busy" and busy_left[pid]:
@@ -249,10 +256,11 @@ async def stream(*, system: Any, messages: list, tools: list | None = None, effo
             yield "switch", (prev, label)
         prev = label
         yield "model", label
-        gen = (_anthropic_stream(key, mdl, system=system, messages=messages, tools=tools, effort=effort,
+        eff = providers.effort(pid, effort, role)
+        gen = (_anthropic_stream(key, mdl, system=system, messages=messages, tools=tools, effort=eff,
                                  max_tokens=max_tokens, schema=schema)
                if PROVIDERS[pid].kind == "anthropic" else
-               (cli if PROVIDERS[pid].kind == "cli" else oai).stream(pid, key, mdl, system=system, messages=messages, tools=tools, effort=effort,
+               (cli if PROVIDERS[pid].kind == "cli" else oai).stream(pid, key, mdl, system=system, messages=messages, tools=tools, effort=eff,
                           max_tokens=max_tokens, schema=schema))
         emitted, resp = False, None
         try:

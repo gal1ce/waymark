@@ -496,3 +496,36 @@ def test_a_subscription_lists_full_model_names_too(monkeypatch):
     cli._LISTED.clear()
     ids = [c["id"] for c in asyncio.run(cli.catalog("gemini_cli"))]
     assert ids == ["pro", "flash", "flash-lite", "auto", "gemini-2.5-pro"]     # "auto" isn't listed twice
+
+
+def test_the_effort_for_tests_and_plans_can_be_set_per_provider(env, monkeypatch):
+    """Unset, each task asks for its own effort; set, every call of tests and plans on that provider uses it, while
+    the coach chat keeps the coach's own. A provider that takes no effort can't be given one."""
+    import asyncio
+    assert providers.effort("anthropic", "high") == "high"
+    providers.save_settings(effort={"anthropic": "max", "claude_code": "xhigh"})
+    assert providers.effort("anthropic", "low") == "max" and providers.effort("claude_code", "medium") == "xhigh"
+    assert providers.effort("anthropic", "low", role="chat") == "low"
+    view = {p["id"]: p for p in providers.view()["providers"]}
+    assert view["anthropic"]["effort"] == "max" and view["groq"]["effort_levels"] == []
+    with pytest.raises(providers.SetupError):
+        providers.save_settings(effort={"gemini": "max"})          # Gemini's API stops at high
+    with pytest.raises(providers.SetupError):
+        providers.save_settings(effort={"groq": "high"})           # sends no effort at all
+    providers.save_settings(effort={"anthropic": ""})
+    assert providers.effort("anthropic", "low") == "low"
+
+    # what reaches the API: the chosen level, and high for a model that has no xhigh
+    env.write_text("ANTHROPIC_API_KEYS=sk-ant-api03-" + "a" * 40 + "\n")
+    envfile._cache = None
+    providers.save_settings(effort={"anthropic": "xhigh"}, models={"anthropic": {"main": "claude-opus-4-6"}})
+    sent = []
+
+    async def create(key, model, **kw):
+        sent.append(llm._kwargs(model, kw["system"], kw["messages"], kw["tools"], kw["effort"], kw["max_tokens"],
+                                kw["schema"])["output_config"]["effort"])
+        return _reply()
+    monkeypatch.setattr(llm, "_anthropic_create", create)
+    asyncio.run(llm.create(system="s", messages=[{"role": "user", "content": "hi"}], effort="low"))
+    assert sent == ["high"]
+    assert llm._kwargs("claude-opus-5-5", "s", [], None, "xhigh", 10, None)["output_config"]["effort"] == "xhigh"

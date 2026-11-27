@@ -984,6 +984,7 @@ class AiIn(BaseModel):
     local_url: str | None = None
     local_on: bool | None = None
     cli_on: dict[str, bool] | None = None
+    effort: dict[str, str] | None = None
 
 
 def _active_model() -> str:
@@ -1015,7 +1016,7 @@ def ai_get():
 @app.put("/api/ai")
 def ai_put(body: AiIn):
     _refuse_setup(lambda: providers.save_settings(body.order, body.fallback, body.models, body.local_url, body.local_on,
-                                                      body.cli_on))
+                                                      body.cli_on, body.effort))
     llm._clients.clear()
     bus.publish("meta", {})
     return providers.view()

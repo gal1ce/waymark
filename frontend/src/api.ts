@@ -76,7 +76,7 @@ export type Test = {
 export type ChatMsg = { id: number; ts: string; role: 'user' | 'assistant'; display: string }
 export type Convo = { id: number; date: string; title: string; created_at: string; updated_at: string; count: number }
 export type MemoryNote = { id: number; text: string; created_at: string; updated_at: string }
-export type Effort = 'low' | 'medium' | 'high'
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 export type ReplyLanguage = 'auto' | 'tr' | 'en'
 export type CoachSettings = { name: string; personality: string; verbosity: number; effort: Effort; model: string; language: ReplyLanguage; memory: MemoryNote[]; verbosity_labels: Record<string, string>; effort_labels: Record<Effort, string>; language_labels: Record<ReplyLanguage, string>; model_active: string; provider: string }
 export type StreamEv =
@@ -186,10 +186,12 @@ export type AiProvider = {
   keys: AiKey[]; models: { main: string; chat: string }; default_models: { main: string; chat: string }; base: string
   /** 'cli': a subscription reached through the vendor's program (command); on/installed are null for the others */
   kind: 'anthropic' | 'openai' | 'cli'; command: string; on: boolean | null; installed: boolean | null
+  /** the thinking effort for tests and plans ('' = each task's own) and the levels this provider takes (none: it sends no effort) */
+  effort: Effort | ''; effort_levels: Effort[]
 }
 export type AiModel = { id: string; name: string; context: number; free: boolean; price: string; chat: boolean; created: number }
 export type AiView = { providers: AiProvider[]; fallback: boolean; local_url: string; local_on: boolean; primary: string | null; env_file: string }
-export type AiPut = { order?: string[]; fallback?: boolean; models?: Record<string, Partial<{ main: string; chat: string }>>; local_url?: string; local_on?: boolean
+export type AiPut = { order?: string[]; fallback?: boolean; models?: Record<string, Partial<{ main: string; chat: string }>>; effort?: Record<string, Effort | ''>; local_url?: string; local_on?: boolean
   cli_on?: Record<string, boolean> }
 
 // Khan content (Kolibri): unit outline, videos, exercises in Perseus format, the in-app unit test

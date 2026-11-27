@@ -229,6 +229,20 @@ const TR = {
   "That isn't a study day you added.": 'Bu senin eklediğin bir çalışma günü değil.', 'That day is over; it stays as it was.': 'O gün geçti; olduğu gibi kalır.',
   'You already worked on that day; it stays.': 'O günde zaten çalıştın; kalır.', 'Not a date.': 'Geçerli bir tarih değil.',
 
+  // thinking effort (Settings → AI providers, Coach)
+  'Thinking effort for tests and plans': 'Testler ve planlar için düşünme düzeyi', '{p} thinking effort for tests and plans': 'Testler ve planlar için {p} düşünme düzeyi',
+  "Each task's own (recommended)": 'Her işin kendi düzeyi (önerilen)', 'Low': 'Düşük', 'Medium': 'Orta', 'High': 'Yüksek', 'Extra high': 'Çok yüksek', 'Maximum': 'En yüksek',
+  'Every test, grading and plan is written at this level. Higher thinks longer and uses more of your limits.': 'Her test, puanlama ve plan bu düzeyde yazılır. Yükseldikçe daha uzun düşünür ve limitlerinden daha çok harcar.',
+  'Plans, days and test questions are written at high, practice sets and lessons at medium, checks and grading at low.': 'Planlar, günler ve test soruları yüksek; alıştırma setleri ve dersler orta; kontroller ve puanlama düşük düzeyde yazılır.',
+  '{p} takes no effort setting: its models think as they are made to.': '{p} düşünme düzeyi ayarı almıyor: modelleri kendi varsayılanıyla düşünür.',
+  '{p} now thinks at {e} for tests and plans.': '{p} testler ve planlar için artık {e} düzeyde düşünüyor.', "{p} uses each task's own effort again.": '{p} yeniden her işin kendi düzeyini kullanıyor.',
+  'Deeper': 'Daha derin', 'Max': 'En derin',
+  'Fast: answers in seconds, fine for most questions.': 'Hızlı: saniyeler içinde cevaplar, çoğu soru için yeterli.',
+  'Balanced: thinks longer, better for tricky concepts.': 'Dengeli: daha uzun düşünür, zor kavramlar için daha iyi.',
+  'Deep: slowest, for hard debugging or long explanations.': 'Derin: en yavaşı; zor hata ayıklama ya da uzun açıklamalar için.',
+  'Deeper: Claude only (elsewhere it is Deep); for the hardest questions.': 'Daha derin: yalnızca Claude (diğerlerinde Derin olur); en zor sorular için.',
+  'Maximum: Claude only (elsewhere it is Deep); slowest and most thorough.': 'En derin: yalnızca Claude (diğerlerinde Derin olur); en yavaş ve en kapsamlı.',
+
   // plan setup, step by step; the app's own controls
   "Each day from {a} to {b}": "Her gün {a} ile {b} arası",
   "A day": "Günde",

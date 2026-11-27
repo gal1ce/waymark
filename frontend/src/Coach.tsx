@@ -406,12 +406,12 @@ export function CoachSettingsView({ ctx }: { ctx: Ctx }) {
       <div className="field">
         <span className="field-l">{tr('Thinking')}</span>
         <div className="seg" role="radiogroup" aria-label={tr('Thinking effort')}>
-          {(['low', 'medium', 'high'] as Effort[]).map((e) => (
+          {(['low', 'medium', 'high', 'xhigh', 'max'] as Effort[]).map((e) => (
             <button key={e} type="button" role="radio" aria-checked={form.effort === e} className={form.effort === e ? 'on' : ''}
-              onClick={() => setForm({ ...form, effort: e })}>{{ low: tr('Fast'), medium: tr('Balanced'), high: tr('Deep') }[e]}</button>
+              onClick={() => setForm({ ...form, effort: e })}>{{ low: tr('Fast'), medium: tr('Balanced'), high: tr('Deep'), xhigh: tr('Deeper'), max: tr('Max') }[e]}</button>
           ))}
         </div>
-        <div className="field-h">{s.effort_labels[form.effort]}</div>
+        <div className="field-h">{tx(s.effort_labels[form.effort] ?? '')}</div>
       </div>
       <div className="field">
         <span className="field-l">{tr('Model')}</span>
