@@ -250,6 +250,9 @@ const TR = {
   '{n} study days this week · {h} planned': 'Bu hafta {n} çalışma günü · {h} planlı', 'On plan · {h} still to go this week': 'Plana uygun · bu hafta {h} kaldı',
   'The week’s plan is done': 'Haftanın planı tamamlandı',
   'they show up here when a task goes long, a test answer is wrong, or you add one': 'bir görev uzarsa, bir test cevabı yanlışsa ya da sen eklersen burada görünür',
+  'No tests yet': 'Henüz test yok',
+  'Open today': 'Bugünü aç',
+  'The end-of-day test is prepared from the test task at the end of the day': 'Gün sonu testi, günün sonundaki test görevinden hazırlanır',
   // Today and Home: levels
   '1 is done.': 'Biri bitti.', '{d} are done.': '{d} tanesi bitti.', '{a} in, about {b} to go': '{a} geçti, yaklaşık {b} kaldı', '{a} in, past its estimate of {b}': '{a} geçti, {b} olan tahmin aşıldı',
   'all done': 'hepsi bitti', '{a} of {b} today': 'bugün {a} / {b}', 'Back to today': 'Bugüne dön',

@@ -17,6 +17,18 @@ export const SOURCE_LABEL: Record<string, string> = live({
 })
 export const BLOCK_LABEL: Record<string, string> = live({ math: 'Math', eng: 'English', c: 'C', kintsugi: 'Kintsugi', test: 'Test' })
 
+/** An empty state: what will be here, and how it gets there. A quiet icon tile, a line, a sentence, maybe one action. */
+export function Empty({ icon, title, children, action }: { icon?: ReactNode; title: ReactNode; children?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="empty-state">
+      {icon && <span className="es-i">{icon}</span>}
+      <div className="es-t">{title}</div>
+      {children && <p className="es-n">{children}</p>}
+      {action && <div className="es-a">{action}</div>}
+    </div>
+  )
+}
+
 export function PageHead({ title, sub, right, children }: { title: ReactNode; sub?: ReactNode; right?: ReactNode; children?: ReactNode }) {
   return (
     <header className="head">

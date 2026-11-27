@@ -149,6 +149,7 @@ export default function App() {
   const [coachOpen, setCoachOpen] = useState(() => store.get('ctu.coach', false))
   // the side: a wide sidebar (new chat, the pages, recent conversations) or the slim rail of icons
   const [navWide, setNavWide] = useState(() => store.get('ctu.navWide', true))
+  const wide = useWide()
   useEffect(() => store.set('ctu.navWide', navWide), [navWide])
   const [coachW, setCoachW] = useState(() => num.get('ctu.coachW', COACH_W))
   const [resizing, setResizing] = useState(false)
@@ -335,6 +336,15 @@ export default function App() {
   const sub = crumb ?? (view.kind === 'day' && view.date && view.date !== todayDate ? fmtDate(view.date)
     : view.kind === 'test' ? t('Test {n}', { n: view.id }) : view.kind === 'khanTest' ? t('Unit test') : null)
 
+  const runningSec = current ? current.spent_sec_live + Math.max(0, Math.floor((Date.now() - fetchedAt.current) / 1000)) : 0
+  const runningPill = current && (
+    <button className="running" onClick={() => go({ kind: 'day', date: todayDate })} title={t('Running task')}>
+      <span className="dot accent" />
+      <span className="running-t">{current.title}</span>
+      <span className="mono">{fmtDur(runningSec)}</span>
+    </button>
+  )
+
   return (
     <div className={`shell nav-${layout.nav}${navWide ? ' nav-wide' : ''} coach-${layout.coach}${sideCoach ? ' coach-on' : ''}${resizing ? ' resizing' : ''}`}
       style={{ '--coach-w': `${sideCoach ? clampCoach(coachW) : coachW}px` } as React.CSSProperties}>
@@ -354,25 +364,15 @@ export default function App() {
           </nav>
         )}
         <div className="topbar-r">
-          {current && (
-            <button className="running" onClick={() => go({ kind: 'day', date: todayDate })} title={t('Running task')}>
-              <span className="dot accent" />
-              <span className="running-t">{current.title}</span>
-              <span className="mono">{fmtDur(current.spent_sec_live + Math.max(0, Math.floor((Date.now() - fetchedAt.current) / 1000)))}</span>
-            </button>
-          )}
           {meta?.fake_clock && <span className="demo-chip" title={t('CTU_NOW is set: this server works on copies, not your real data')}>{t('Demo clock')}</span>}
+          {!wide && runningPill}
           <Counters version={version} />
-          <NoticeBell version={version} confirm={confirm} go={(link) => { location.hash = link }} />
-          <button className="icon-btn theme-btn" onClick={() => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark')}
-            aria-label={t('Switch light or dark')} title={theme === 'system' ? t('Theme follows the system · click to pick') : t('Switch light or dark')}>
-            {document.documentElement.dataset.theme === 'dark' ? <Sun size={18} strokeWidth={1.6} /> : <Moon size={18} strokeWidth={1.6} />}
-          </button>
           {!onNix && (
-            <button className={'btn ghost sm pill' + (coachOpen ? ' on' : '')} onClick={() => setCoachOpen((o) => !o)} aria-pressed={coachOpen} title={t('Coach panel  ]')}>
-              <MessageSquareText size={15} strokeWidth={1.6} />{meta?.coach_name || t('Coach')}
+            <button className={'btn ghost sm pill coach-toggle' + (coachOpen ? ' on' : '')} onClick={() => setCoachOpen((o) => !o)} aria-pressed={coachOpen} title={t('Coach panel  ]')}>
+              <MessageSquareText size={15} strokeWidth={1.6} /><span className="ct-l">{meta?.coach_name || t('Coach')}</span>
             </button>
           )}
+          <NoticeBell version={version} confirm={confirm} go={(link) => { location.hash = link }} />
           <AvatarMenu ctx={ctx} />
         </div>
       </header>
@@ -401,6 +401,20 @@ export default function App() {
           ))}
         </nav>
         {!noPlan && <Recents ctx={ctx} active={view.kind === 'nix' ? view.id ?? null : null} onOpen={(id) => go({ kind: 'nix', id })} />}
+        {wide && (
+          <div className="side-foot">
+            {current && (
+              <button className="side-now" onClick={() => go({ kind: 'day', date: todayDate })} title={current.title}>
+                <span className="side-now-i"><span className="dot accent" /></span>
+                <span className="side-now-b">
+                  <span className="side-now-l">{t('Running task')}</span>
+                  <span className="side-now-t">{current.title}</span>
+                </span>
+                <span className="side-now-c mono">{fmtDur(runningSec)}</span>
+              </button>
+            )}
+          </div>
+        )}
       </aside>
 
       <div className="center">
@@ -541,6 +555,19 @@ function useDismiss(open: boolean, close: () => void) {
     return () => { document.removeEventListener('pointerdown', down, true); window.removeEventListener('keydown', key, true) }
   }, [open, close])
   return ref
+}
+
+/** Desktop width: the sidebar is a column (not the phone's tab bar), so the account and counters live at its foot. */
+function useWide() {
+  const q = '(min-width: 861px)'
+  const [wide, setWide] = useState(() => window.matchMedia(q).matches)
+  useEffect(() => {
+    const m = window.matchMedia(q)
+    const on = () => setWide(m.matches)
+    m.addEventListener('change', on)
+    return () => m.removeEventListener('change', on)
+  }, [])
+  return wide
 }
 
 function AvatarMenu({ ctx }: { ctx: Ctx }) {
