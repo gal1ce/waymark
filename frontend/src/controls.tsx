@@ -55,11 +55,13 @@ export function Popover({ anchor, open, onClose, label, className = '', children
 }
 
 // ------------------------------------------------------------------ checkbox and switch
-export function Checkbox({ checked, onChange, children, disabled, className = '' }: {
+export function Checkbox({ checked, onChange, children, disabled, className = '', label, title }: {
   checked: boolean; onChange: (v: boolean) => void; children?: ReactNode; disabled?: boolean; className?: string
+  /** the accessible name of a checkbox without visible text */
+  label?: string; title?: string
 }) {
   return (
-    <button type="button" role="checkbox" aria-checked={checked} disabled={disabled} className={'cbx' + (checked ? ' on' : '') + (className ? ' ' + className : '')}
+    <button type="button" role="checkbox" aria-checked={checked} aria-label={label} title={title} disabled={disabled} className={'cbx' + (checked ? ' on' : '') + (className ? ' ' + className : '')}
       onClick={() => onChange(!checked)}>
       <span className="cbx-box" aria-hidden><Check size={12} strokeWidth={2.8} /></span>
       {children != null && <span className="cbx-l">{children}</span>}

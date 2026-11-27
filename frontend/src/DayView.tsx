@@ -9,7 +9,8 @@ import {
 import { addDays, api, blockTitle, canPeek, fmtDate, fmtDur, fmtMin, toMin, weekday, weekNo, type Block, type CloseItem, type Day, type OutlineBlock, type Stuck, type Task } from './api'
 import type { Ctx } from './App'
 import { beejPage } from './BeejPage'
-import { t as tr, tx } from './i18n'
+import { dayName, t as tr, tx } from './i18n'
+import { Select } from './controls'
 import { stuckDetail, stuckSummary } from './stuck'
 import { bumpXp } from './prefs'
 import { BLOCK_LABEL, KIND_LABEL, PageHead, ScoreBar, Section, SOURCE_LABEL, useFold } from './ui'
@@ -89,8 +90,9 @@ export default function DayView({ date, ctx }: { date: string; ctx: Ctx }) {
         {open && <WhyPlan day={day} />}
       </PageHead>
       <WeekStrip date={day.date} ctx={ctx} />
+      {day.extra && <ExtraDayNote day={day} ctx={ctx} />}
 
-      {!open ? (<>
+      {day.status === 'off' && day.can_add?.length ? <AddStudy day={day} ctx={ctx} /> : !open ? (<>
         <div className="card banner">
           <Lock size={18} strokeWidth={1.5} className="t3" />
           {day.status === 'off' ? <span><b>{tr('No study on {day}.', { day: weekday(day.date) })}</b> {tr('The plan puts nothing on this day')}</span>
@@ -148,6 +150,52 @@ export default function DayView({ date, ctx }: { date: string; ctx: Ctx }) {
 }
 
 
+/** A day off of a plan of the user's own: study on it anyway, for this date only. It copies the blocks of one of the
+    plan's study days and takes the next work of each course, so the planned days after it move up. */
+function AddStudy({ day, ctx }: { day: Day; ctx: Ctx }) {
+  const opts = day.can_add ?? []
+  const [like, setLike] = useState(opts[0])
+  const [busy, run] = useBusy()
+  const add = () => run(async () => {
+    const r = await ctx.run(api.addExtraDay(day.date, like))
+    if (r) {
+      ctx.notify(tr('Study added on {day}', { day: weekday(day.date) }), 'ok',
+        r.replanned.length ? tr('The days planned after it were planned again: their work moved up.') : undefined)
+      ctx.refresh()
+    }
+  })
+  return (
+    <section className="card sec extra-add">
+      <h2 className="sec-h">{tr('No study on {day}.', { day: weekday(day.date) })}<span className="meta">{tr('a day off')}</span></h2>
+      <p className="sec-sub">{tr('Want to study anyway? Add study for this date only. It uses the blocks of one of your study days and goes on with the next work in your plan, so the days after it move up. Your weekly study days stay the same.')}</p>
+      <div className="inline-form">
+        <Select size="sm" value={like} onChange={setLike} label={tr('Which day\'s blocks to use')}
+          options={opts.map((w) => ({ value: w, label: tr('The blocks of {day}', { day: dayName((w + 1) % 7) }) }))} />
+        <button type="button" className="btn primary sm" {...busyProps(busy)} onClick={add}><Plus size={14} strokeWidth={1.8} /><span>{tr('Study on this day')}</span></button>
+      </div>
+    </section>
+  )
+}
+
+/** A study day the user added on a day off: says so, and takes it back while nobody has worked on it. */
+function ExtraDayNote({ day, ctx }: { day: Day; ctx: Ctx }) {
+  const [busy, run] = useBusy()
+  const x = day.extra!
+  const remove = async () => {
+    const ok = await ctx.confirm({
+      title: tr('Take this study day back?'), action: tr('Take it back'),
+      body: tr('{day} goes back to being a day off. Its work returns to the days after it.', { day: weekday(day.date) }),
+    })
+    if (ok) run(async () => { const r = await ctx.run(api.removeExtraDay(day.date)); if (r) { ctx.notify(tr('Study day taken back'), 'ok'); ctx.refresh() } })
+  }
+  return (
+    <div className="card banner split extra-note">
+      <span><b>{tr('A study day you added.')}</b> {tr('{day} is normally a day off; this date uses the blocks of {like}.', { day: weekday(day.date), like: dayName((x.like + 1) % 7) })}</span>
+      {x.removable && <button type="button" className="btn ghost sm" {...busyProps(busy)} onClick={remove}><X size={14} strokeWidth={1.6} /><span>{tr('Take it back')}</span></button>}
+    </div>
+  )
+}
+
 /** A locked day's outline: each block's time, track and unit, and whether the unit check falls on it. */
 function Outline({ items }: { items: OutlineBlock[] }) {
   return (
@@ -185,11 +233,13 @@ function WeekStrip({ date, ctx }: { date: string; ctx: Ctx }) {
         {Array.from({ length: 7 }, (_, i) => {
           const di = addDays(w.days[0].date, i)
           const d = w.days.find((x) => x.date === di) ?? { date: di, status: 'locked' }
-          const blocked = d.status === 'off' || (d.status === 'locked' && !peek(ctx, d.date))
+          // a day off from today on opens too, in a plan of the user's own: study can be added on it
+          const addable = d.status === 'off' && ctx.meta?.plan?.key === 'custom' && d.date >= ctx.todayDate
+          const blocked = (d.status === 'off' && !addable) || (d.status === 'locked' && !peek(ctx, d.date))
           return (
             <button key={d.date} disabled={blocked} className={`ws-day ${d.status}${d.date === date ? ' sel' : ''}`}
               aria-current={d.date === date ? 'date' : undefined}
-              title={d.status === 'locked' ? (peek(ctx, d.date) ? tr('Locked: preview only, opens that morning') : tr('Locked: opens that morning')) : d.status === 'off' ? tr('No study') : fmtDate(d.date)}
+              title={d.status === 'locked' ? (peek(ctx, d.date) ? tr('Locked: preview only, opens that morning') : tr('Locked: opens that morning')) : d.status === 'off' ? (addable ? tr('No study: open it to add study on this day') : tr('No study')) : fmtDate(d.date)}
               onClick={() => ctx.go({ kind: 'day', date: d.date })}>
               <span>{weekday(d.date, true)}</span>
               {d.status === 'locked' ? <Lock size={12} strokeWidth={1.5} /> : <span className="mono">{Number(d.date.slice(8))}</span>}

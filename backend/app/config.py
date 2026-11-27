@@ -137,6 +137,7 @@ def next_study_day(d: date) -> date:
     d = d + timedelta(days=1)
     if not days:   # no plan yet: every day counts, so callers never loop forever
         return d
-    while d.weekday() not in days:
+    extra = profile.extra_days()
+    while d.weekday() not in days and d.isoformat() not in extra:
         d += timedelta(days=1)
     return d

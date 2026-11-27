@@ -107,6 +107,27 @@ def study_weekdays() -> set[int]:
     return set(active().get("study_weekdays") or [])
 
 
+def extra_days() -> dict[str, int]:
+    """One-off study days the user added on days the plan has off: {date: the study weekday whose blocks it uses}.
+    Kept in kv 'extra_days', apart from the plan, so the weekly pattern never changes."""
+    from . import db
+    v = db.kv_get("extra_days", None)
+    return {k: int(x) for k, x in v.items()} if isinstance(v, dict) else {}
+
+
+def is_study_day(d: date) -> bool:
+    return d.weekday() in study_weekdays() or d.isoformat() in extra_days()
+
+
+def day_week(d: date) -> list[dict]:
+    """The blocks of day d: its weekday's, or for a one-off study day the blocks of the weekday it copies."""
+    if d.weekday() not in study_weekdays():
+        like = extra_days().get(d.isoformat())
+        if like is not None:
+            return week(like)
+    return week(d.weekday())
+
+
 def week(weekday: int) -> list[dict]:
     """The blocks of a weekday (0 = Monday), as copies the caller may change."""
     w = active().get("week") or []

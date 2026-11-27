@@ -26,7 +26,7 @@ import Setup from './Setup'
 import { UpdateScreen } from './Update'
 import { Scrollbar } from './Scrollbar'
 import { useLayout, useTheme, type Layout, type ThemePref } from './prefs'
-import { t, t as tApp, useLang, type Lang } from './i18n'
+import { t, t as tApp, tx, useLang, type Lang } from './i18n'
 import { ConfirmDialog, NoticeBell, Toasts, type ConfirmOpts, type Toast } from './Notices'
 
 export type View =
@@ -200,7 +200,7 @@ export default function App() {
     return () => window.removeEventListener('ctu:notify', on)
   }, [notify])
   const run = useCallback(async <T,>(p: Promise<T>) => {
-    try { return await p } catch (e) { notify(e instanceof ApiError ? e.message : String(e), 'err'); return undefined }
+    try { return await p } catch (e) { notify(e instanceof ApiError ? tx(e.message) : String(e), 'err'); return undefined }
   }, [notify])
   const refresh = useCallback(() => setVersion((v) => v + 1), [])
   const go = useCallback((v: View) => {

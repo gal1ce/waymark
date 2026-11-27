@@ -71,7 +71,7 @@ def render(plan: dict, log_rows: list[dict], progress: list[dict] | None = None)
         cells = ", ".join(f"{b['start']}–{b['end']} {_md(b['title'])}" for b in blocks)
         out.append(f"| {WEEKDAY_TR[i]} | {cells} |")
     out.append("")
-    marks = {"passed": "[x]", "tried": "[~]", "current": "[>]", "planned": "[ ]", "todo": "[ ]"}
+    marks = {"passed": "[x]", "tried": "[~]", "current": "[>]", "planned": "[ ]", "todo": "[ ]", "removed": "[-]"}
     state = {p["key"]: p for p in progress or []}
     for tr in plan.get("tracks") or []:
         out += [f"## {_md(tr['label'])}", ""]
@@ -81,6 +81,8 @@ def render(plan: dict, log_rows: list[dict], progress: list[dict] | None = None)
         for i, u in enumerate(tr.get("units") or []):
             s = st.get(i, {}).get("status", "planned")
             line = f"- {marks.get(s, '[ ]')} {i + 1}. {_md(u['title'])}"
+            if s == "removed":
+                line += " (taken out of the plan)"
             if u.get("objective"):
                 line += f": {_md(u['objective'])}"
             out.append(line)

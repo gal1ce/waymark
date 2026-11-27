@@ -169,6 +169,9 @@ def _prompt(a: dict, earlier: dict | None = None, change: str = "") -> str:
                      f"<plan_file>\n{a['plan_text']}\n</plan_file>")
     if earlier:
         parts.append("\nThe earlier draft (as JSON):\n" + json.dumps(earlier, ensure_ascii=False)[:60000])
+        if any(u.get("skip") for t in earlier.get("tracks") or [] for u in t.get("units") or []):
+            parts.append('Units with "skip": true were taken out by the user. Keep them in the list with the same title '
+                         "(the app keeps them out of the schedule); don't add them back as new units.")
     if change:
         parts.append(f"\nThe user asks for these changes to that draft:\n{change}")
     return "\n".join(parts)
@@ -494,6 +497,99 @@ def set_exams(dates: dict[str, str]) -> dict:
     return {"notes": notes, "changed": changed}
 
 
+def _retime(plan: dict, roadmap: bool) -> None:
+    """The plan's projected end and each course's last unit day, worked out again after units were taken out or put
+    back (from the start, as at approval); for a draft the roadmap follows too."""
+    from . import tracks as tr_mod
+    start = date.fromisoformat(plan["start_date"])
+    end = tr_mod.finish(plan["week"], plan["tracks"], start)
+    plan["end_date"] = end.isoformat() if end else ""
+    plan["track_ends"] = tr_mod.track_ends(plan["week"], plan["tracks"], start)
+    if end:
+        ctx = plan["coach"].get("context") or ""
+        plan["coach"]["context"] = re.sub(r"(At this schedule the last unit ends on )\d{4}-\d\d-\d\d", rf"\g<1>{end.isoformat()}", ctx)
+        if roadmap:
+            _roadmap_from_schedule(plan, start, end, plan.get("deadline") or "")
+
+
+def _toggle(plan: dict, key: str, idx: int, on: bool) -> tuple[dict, dict] | None:
+    """Takes a unit out of a plan (on=False) or puts it back: a flag on the unit, so it keeps its place and its number.
+    None when it already was that way. A course keeps at least one unit."""
+    tr = next((t for t in plan.get("tracks") or [] if t["key"] == key), None)
+    if not tr:
+        raise state.Refused(f"No course '{key}' in the plan.")
+    units = tr.get("units") or []
+    if not (isinstance(idx, int) and 0 <= idx < len(units)):
+        raise state.Refused("No such unit in that course.")
+    u = units[idx]
+    if on != bool(u.get("skip")):
+        return None
+    if not on and sum(1 for x in units if not x.get("skip")) <= 1:
+        raise state.Refused("A course keeps at least one unit. To drop the whole course, ask for a change to the plan.")
+    if on:
+        u.pop("skip", None)
+    else:
+        u["skip"] = True
+    return tr, u
+
+
+def set_draft_unit(key: str, idx: int, on: bool) -> dict:
+    """A unit taken out of the draft under review, or put back. Nothing is planned yet; the draft's end date, the
+    courses' last unit days and the roadmap follow at once."""
+    if "draft" in _running:
+        raise state.Refused("Wait until the draft is written.")
+    st = db.kv_get("onboarding", None) or {}
+    draft = (st.get("draft") or {}).get("plan")
+    if st.get("status") != "ready" or not draft:
+        raise state.Refused("There is no finished draft to change.")
+    if _toggle(draft, key, idx, on):
+        _retime(draft, roadmap=True)
+        _set(st)
+    return status()
+
+
+def set_plan_unit(key: str, idx: int, on: bool) -> bool:
+    """The same on the approved plan (planner.set_unit plans the days ahead again). A unit whose check is passed
+    already can't be taken out: it is done. Returns whether anything changed."""
+    from . import tracks as tr_mod
+    if profile.key() != "custom":
+        raise state.Refused("Taking units out is for a plan of your own.")
+    plan = json.loads(json.dumps(db.kv_get("plan", {})))
+    tr = next((t for t in plan.get("tracks") or [] if t["key"] == key), None)
+    if tr and not on and 0 <= idx < len(tr.get("units") or []) and db.q1(
+            "SELECT 1 FROM scores WHERE kind='unit_quiz' AND item=? AND passed=1 LIMIT 1", (tr_mod.item(tr, idx),)):
+        raise state.Refused("That unit is passed already; it stays in the plan.")
+    got = _toggle(plan, key, idx, on)
+    if not got:
+        return False
+    tr, u = got
+    _retime(plan, roadmap=False)
+    db.kv_set("plan", plan)
+    profile.reload()
+    planlog.add((f"Unit put back into the plan: {tr['label']} · {u['title']}." if on else
+                 f"Unit taken out of the plan: {tr['label']} · {u['title']}. Work already done on it stays.")
+                + " Days not started yet were planned again.", "Plan")
+    planlog.write()
+    return True
+
+
+def _keep_removed(plan: dict, earlier: dict | None) -> None:
+    """A changed draft keeps the units the user took out of the earlier one (matched by course and title)."""
+    if not earlier:
+        return
+    out = {(t["key"], u["title"].casefold()) for t in earlier.get("tracks") or [] for u in t.get("units") or [] if u.get("skip")}
+    out |= {(t["label"].casefold(), u["title"].casefold()) for t in earlier.get("tracks") or [] for u in t.get("units") or [] if u.get("skip")}
+    hit = False
+    for t in plan["tracks"]:
+        units = t["units"]
+        for u in units:
+            if ((t["key"], u["title"].casefold()) in out or (t["label"].casefold(), u["title"].casefold()) in out) \
+                    and sum(1 for x in units if not x.get("skip")) > 1:
+                u["skip"] = hit = True
+    if hit:
+        _retime(plan, roadmap=True)
+
+
 def _lines(text, n: int) -> str:
     lines = [ln.strip() for ln in str(text or "").splitlines() if ln.strip()]
     lines = [ln if ln.startswith("- ") else "- " + ln.lstrip("-• ") for ln in lines][:n]
@@ -664,6 +760,7 @@ async def run() -> None:
         _progress["phase"] = "checking"
         a, coded = _programming(raw, a, st.get("change") or "")
         plan, notes = normalize(raw, a)
+        _keep_removed(plan, (st.get("draft") or {}).get("plan") if st.get("change") else None)
         notes = coded + notes
         notes += await asyncio.to_thread(check_links, plan)
         st = {**st, "answers_full": a, "answers": {k: v for k, v in a.items() if k != "plan_text"}}
@@ -719,6 +816,11 @@ def approve(confirm: bool) -> dict:
                 db.ex("DELETE FROM tasks WHERE date=?", (d["date"],))
                 db.ex("DELETE FROM blocks WHERE date=?", (d["date"],))
                 db.ex("DELETE FROM days WHERE date=?", (d["date"],))
+        # one-off study days ahead copy a weekday of the old plan: they go unless worked on already
+        extra = profile.extra_days()
+        keep = {k: v for k, v in extra.items() if k < today().isoformat() or db.q1("SELECT 1 FROM days WHERE date=?", (k,))}
+        if keep != extra:
+            db.kv_set("extra_days", keep)
         language = (plan.get("answers") or {}).get("language")
         if language in ("tr", "en"):
             from . import coach
@@ -729,7 +831,8 @@ def approve(confirm: bool) -> dict:
     profile.reload()
     health.clear_prefix("runway_")
     planlog.add(("Plan approved" if had != "custom" else "Plan change approved") + f": {plan['label']}. Starts "
-                f"{start.isoformat()}; " + "; ".join(f"{t['label']} ({len(t['units'])} units)" for t in plan["tracks"]) +
+                f"{start.isoformat()}; " + "; ".join(f"{t['label']} ({sum(1 for u in t['units'] if not u.get('skip'))} units)"
+                                         for t in plan["tracks"]) +
                 ".", "Plan")
     planlog.write()
     bus.publish("plan", {"approved": True})

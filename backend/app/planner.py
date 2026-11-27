@@ -574,6 +574,9 @@ def _carry_over(closed: str) -> None:
                 "ORDER BY b.ord, t.ord", (closed, *kinds))   # a check that was taken is not carried: its score stands
     by_kind: dict[str, list] = {}
     for r in rows:
+        m = json.loads(r["meta"] or "{}")
+        if m.get("track") and tracks.is_removed(profile.track(m["track"]), m.get("unit")):
+            continue   # its unit was taken out of the plan: nothing to carry
         by_kind.setdefault(r["bkind"], []).append(r)
     for kind, items in by_kind.items():
         target = _next_block(kind, closed)
@@ -699,10 +702,12 @@ async def _ensure_horizon() -> None:
     if not profile.ready():
         return   # a new install plans nothing until its plan is approved
     t = today()
-    if not profile.is_ctu() and t >= start_date() and t.weekday() in study_weekdays() and \
+    if not profile.is_ctu() and t >= start_date() and profile.is_study_day(t) and \
             not db.q1("SELECT 1 FROM days WHERE date=?", (t.isoformat(),)):
         await _generate_reference(t)   # a plan approved on a study day starts today (the CTU plan seeds its first days)
     d = ensure_anchor()
+    if d > t and d.isoformat() in profile.extra_days() and not db.q1("SELECT 1 FROM days WHERE date=?", (d.isoformat(),)):
+        await _generate_reference(d)   # an added study day can be the anchor itself, which the loop starts after
     for _ in range(HORIZON_STUDY_DAYS):
         d = next_study_day(d)
         ds = d.isoformat()
@@ -716,6 +721,98 @@ async def _ensure_horizon() -> None:
 async def ensure_horizon() -> None:
     async with _lock:
         await _ensure_horizon()
+
+
+def _drop_ahead(since: date) -> list[str]:
+    """Planned days from `since` on that nobody has worked on are taken out, and their work goes back to the tracks'
+    cursor, so the next planning fills them again in order from the plan as it is now. A day with work on it stays,
+    and so does every day before it."""
+    rows = db.q("SELECT date FROM days WHERE status='planned' AND date>=? ORDER BY date", (max(since, today()).isoformat(),))
+    worked = [r["date"] for r in rows if touched(r["date"])]
+    drop = [r["date"] for r in rows if not worked or r["date"] > worked[-1]]
+    if not drop:
+        return []
+    marks = ",".join("?" * len(drop))
+    with db.tx():
+        work = db.q(f"SELECT * FROM tasks WHERE date IN ({marks}) ORDER BY date, block_id, ord", tuple(drop))
+        for table in ("tasks", "blocks", "days"):
+            db.ex(f"DELETE FROM {table} WHERE date IN ({marks})", tuple(drop))
+        tracks.rewind(work)
+    return drop
+
+
+async def set_unit(track: str, idx: int, on: bool) -> dict:
+    """A unit taken out of the approved plan (on=False) or put back. The days ahead nobody has started are planned
+    again, so the remaining units move up (or the unit put back comes next); started days keep their tasks."""
+    from . import onboarding
+    async with _lock:
+        changed = onboarding.set_plan_unit(track, idx, on)
+        dropped = []
+        if changed:
+            dropped = _drop_ahead(today())
+            if on:
+                tracks.put_back(profile.track(track), idx)
+            await _ensure_horizon()
+    for ds in dropped:
+        bus.publish("plan", {"date": ds})
+    return {"changed": changed, "replanned": dropped}
+
+
+# ------------------------------------------------------------------ one-off study days
+EXTRA_AHEAD_DAYS = 120   # how far ahead a study day can be added on a day off
+
+
+async def add_extra_day(ds: str, like: int | None = None) -> dict:
+    """A study day on a day the plan has off, for that date only: it uses the blocks of one of the plan's study
+    weekdays and works on what comes next in each track, so the planned days after it are planned again (their work
+    moves up). The weekly pattern doesn't change."""
+    if profile.key() != "custom":
+        raise state.Refused("Studying on a day off is for a plan of your own.")
+    d = date.fromisoformat(ds)
+    if d < today():
+        raise state.Refused("That day is over.")
+    if d < start_date():
+        raise state.Refused("That day is before the plan starts.")
+    if d > today() + timedelta(days=EXTRA_AHEAD_DAYS):
+        raise state.Refused("That day is too far ahead; add it closer to the date.")
+    if profile.is_study_day(d):
+        raise state.Refused("That is a study day already.")
+    days = sorted(study_weekdays())
+    if like is None:
+        like = days[0]
+    if like not in days:
+        raise state.Refused("Pick one of the plan's study days to copy.")
+    async with _lock:
+        db.kv_set("extra_days", {**profile.extra_days(), ds: like})
+        dropped = _drop_ahead(d)
+        await _ensure_horizon()
+    for x in [ds, *dropped]:
+        bus.publish("plan", {"date": x})
+    return {"date": ds, "like": like, "replanned": dropped}
+
+
+async def remove_extra_day(ds: str) -> dict:
+    """Takes back a study day added on a day off, while nobody has worked on it; its work goes back to the days after."""
+    d = date.fromisoformat(ds)
+    if ds not in profile.extra_days():
+        raise state.Refused("That isn't a study day you added.")
+    if d < today():
+        raise state.Refused("That day is over; it stays as it was.")
+    if touched(ds):
+        raise state.Refused("You already worked on that day; it stays.")
+    async with _lock:
+        dropped = _drop_ahead(d)
+        extra = profile.extra_days()
+        extra.pop(ds, None)
+        db.kv_set("extra_days", extra)
+        with db.tx():   # in case a later day with work kept it out of the drop
+            db.ex("DELETE FROM tasks WHERE date=?", (ds,))
+            db.ex("DELETE FROM blocks WHERE date=?", (ds,))
+            db.ex("DELETE FROM days WHERE date=?", (ds,))
+        await _ensure_horizon()
+    for x in [ds, *dropped]:
+        bus.publish("plan", {"date": x})
+    return {"date": ds, "replanned": dropped}
 
 
 def check_runway() -> dict:
