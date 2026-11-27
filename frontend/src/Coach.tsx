@@ -279,6 +279,19 @@ function Reply({ text, steps, ctx, live, onNav }: { text: string; steps?: ChatSt
     : <Steps key={i} list={p.list} live={live} />)}</>
 }
 
+/** Your message as you wrote it; past a dozen lines it folds, so pasted code doesn't fill the screen. */
+function UserText({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const long = text.split('\n').length > 12 || text.length > 900
+  if (!long) return <>{text}</>
+  return (
+    <span className={'msg-long' + (open ? ' open' : '')}>
+      <span className="msg-long-t">{text}</span>
+      <button type="button" className="msg-long-b" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? tr('Show less') : tr('Show all')}</button>
+    </span>
+  )
+}
+
 function DraftView({ draft, name, ctx }: { draft: Draft; name: string; ctx: Ctx }) {
   const shown = settle(draft.text)
   const running = draft.steps?.some((x) => x.state === 'run')
@@ -800,7 +813,7 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
     {shown.map((m) => (
       <div key={m.id} className={'msg ' + m.role}>
         {m.role === 'assistant' && <CoachAvatar ctx={ctx} size="sm" />}
-        {m.role === 'assistant' ? <Reply text={m.display} steps={m.steps} ctx={ctx} /> : m.display}
+        {m.role === 'assistant' ? <Reply text={m.display} steps={m.steps} ctx={ctx} /> : <UserText text={m.display} />}
         <div className="msg-foot">
           <time className="ts" dateTime={m.ts} title={`${fmtDate(m.ts.slice(0, 10))} ${m.ts.slice(11, 16)}`}>{m.ts.slice(11, 16)}</time>
           {m.id > 0 && !busy && (

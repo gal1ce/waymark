@@ -1106,8 +1106,14 @@ button.avatar.me-pic { display: grid; place-items: center; padding: 0; border: 0
 .msg { max-width: 100%; font-size: 14px; line-height: 22px; }
 .msg.user {
   position: relative; align-self: flex-end; background: var(--s-raised); border-radius: 14px 14px 4px 14px; padding: 8px 12px;
-  max-width: min(85%, calc(100% - 110px)); white-space: pre-wrap; overflow-wrap: anywhere;
+  max-width: min(85%, calc(100% - 110px)); white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4;
 }
+/* a long message of yours (pasted code, a page of notes) folds to a dozen lines; the button opens it */
+.msg-long { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.msg-long-t { max-height: calc(12lh); overflow: hidden; mask-image: linear-gradient(180deg, #000 calc(100% - 3lh), transparent); }
+.msg-long.open .msg-long-t { max-height: none; mask-image: none; }
+.msg-long-b { border: 0; background: none; padding: 0; font: inherit; font-size: 12.5px; color: var(--t2); cursor: pointer; }
+.msg-long-b:hover { color: var(--t1); text-decoration: underline; }
 .msg.assistant { color: var(--t1); }
 .msg.assistant .md { color: var(--t1); max-width: none; }
 .msgs > .msg:last-of-type { animation: enter var(--d-panel) var(--ease-out); }
@@ -4004,7 +4010,8 @@ body.is-sorting, body.is-sorting * { cursor: grabbing !important; user-select: n
   --nix-glow-0: oklch(0.92 0.14 88 / 0.5); --nix-glow-1: oklch(0.9 0.13 80 / 0.14); }
 :root[data-theme="dark"] { --topo-line: oklch(0.85 0.03 250 / 0.07); --topo-strong: oklch(0.85 0.03 250 / 0.13); --topo-trail: oklch(0.78 0.11 262 / 0.5); --topo-glow: oklch(0.75 0.14 262 / 0.35);
   --nix-glow-0: oklch(0.88 0.16 85 / 0.55); --nix-glow-1: oklch(0.8 0.15 75 / 0.2); }
-.nix-main > :not(.topo) { position: relative; z-index: 1; }
+/* not the scrollbar: made relative, it became a flex item as tall as the thread and squeezed the messages to a strip */
+.nix-main > :not(.topo, .osb) { position: relative; z-index: 1; }
 .topo { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; transition: opacity 700ms var(--ease-out); }
 .nix-main:not(.is-empty) .topo { opacity: 0.55; }
 
