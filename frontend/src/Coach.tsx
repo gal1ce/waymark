@@ -821,7 +821,7 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
     <div key={lastAsst?.id} className="follow" role="group" aria-label={tr('Suggested replies')}>
       {followups.map((f, i) => (
         <button key={f} className="follow-b" style={{ '--i': i } as React.CSSProperties} onClick={() => sendText(f)}
-          title={i === 0 && !text ? tr('Click to send · Tab puts it in the box') : tr('Click to send')}>
+          title={f + '\n' + (i === 0 && !text ? tr('Click to send · Tab puts it in the box') : tr('Click to send'))}>
           <span>{f}</span>{i === 0 && !text && <kbd className="follow-k" aria-hidden="true">Tab</kbd>}
         </button>
       ))}
