@@ -4066,36 +4066,138 @@ body.is-sorting, body.is-sorting * { cursor: grabbing !important; user-select: n
 .set-shell .ai-row-btn { border-radius: var(--r-ctl); }
 .set-shell .ai { padding: 6px 0 0; }
 
-/* ================================================================= Today and Home: one column of headed lists
-   (the Settings language). The card for what to do now is the one box on Today. */
-.page.day-page { max-width: 880px; gap: 36px; }
-.day-page .sg + .sg { margin-top: 0; }
-.dblk + .dblk { border-top: 1px solid var(--line); }
-.dblk-h { display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 4px; border: 0; background: none; color: var(--t1); cursor: pointer; text-align: left; border-radius: var(--r-row); }
-.dblk-h:hover { background: var(--s-hover); }
-.dblk-h[aria-disabled='true'] { cursor: default; }
-.dblk-h > svg { color: var(--t3); flex: none; }
-.dblk-time { font-size: 12px; color: var(--t3); min-width: 88px; font-variant-numeric: tabular-nums; }
-.dblk-t { font-size: 15px; font-weight: 600; }
-.dblk-sum { margin-left: auto; font-size: 12px; color: var(--t3); white-space: nowrap; }
-.dblk.now .dblk-time { color: var(--accent-text); }
-.dblk.past:not(.now) .dblk-t { color: var(--t2); }
-.dblk-b { padding: 0 0 10px 26px; }
-.dblk-b .task { border-top: 1px solid var(--line); }
-.dblk-b .task-row { padding: 10px 8px; border-radius: var(--r-row); }
-.dblk-b .task-body { padding: 4px 8px 16px 40px; }
-.why-b { padding: 14px 0 4px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 22px; color: var(--t2); }
+/* ================================================================= Today and Home: three levels
+   Level 1 (.lead): the one card on the page, with the page's one large serif title.
+   Level 2 (.lv2): sections under a rule, each a heading, a quiet note and at most one large figure (.lv-fig).
+   Level 3: quiet lines at the end. Spacing steps: 8 · 16 · 24 · 40. The accent marks only what is happening now. */
+.page.lv-page { gap: 40px; }
+.eyebrow { margin: 0; font: 500 12px/16px var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--t3); }
+.eyebrow.acc { color: var(--accent-text); }
+.eyebrow.pos { color: var(--pos); }
+.eyebrow .ver { text-decoration: underline dotted var(--line-mark); text-underline-offset: 3px; cursor: help; }
+
+.meter { display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--s-raised-2); overflow: hidden; }
+.meter > i { display: block; height: 100%; border-radius: 2px; background: var(--accent); transition: width var(--d-panel) var(--ease-out); }
+
+/* level 1 */
+.lead { display: flex; flex-direction: column; gap: 24px; padding: 32px 36px 28px; border-radius: 20px; background: var(--s-card); border: 1px solid var(--line); box-shadow: var(--shadow-card); }
+.lead.on { border-color: var(--accent-line); }
+.lead-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 48px; align-items: start; }
+.lead-l { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.lead-title { margin: 0; font: 400 40px/48px var(--serif); letter-spacing: -0.01em; color: var(--t1); text-wrap: balance; display: flex; align-items: center; gap: 12px; }
+.lead-sub { margin: 0; font-size: 15px; line-height: 23px; color: var(--t2); max-width: 72ch; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.lead-r { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 220px; }
+.lead-r .meter { width: 260px; }
+.lead-timer { font: 500 64px/1 var(--mono); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--t1); }
+.lead-timer.dim { font-size: 40px; color: var(--t2); }
+.lead-note { font-size: 13px; color: var(--t3); text-align: right; }
+.lead-acts { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.lead-res { margin-left: auto; display: flex; }
+.lead-res .res { margin: 0; }
+.lead .drail { margin-top: 4px; padding-top: 20px; border-top: 1px solid var(--line); }
+
+/* level 2 */
+.lv2 { display: flex; flex-direction: column; gap: 16px; padding-top: 20px; border-top: 1px solid var(--line); min-width: 0; }
+.lv2-h { display: flex; align-items: baseline; gap: 12px; min-height: 24px; }
+.lv2-h h2 { margin: 0; font: 500 15px/24px var(--sans); color: var(--t1); }
+.lv2-m { margin-left: auto; font-size: 12.5px; color: var(--t3); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.lv2-a { align-self: center; }
+.lv2-m + .lv2-a { margin-left: 4px; }
+.lv2-h h2 + .lv2-a { margin-left: auto; }
+.lv-fig { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.lv-fig b { font: 500 28px/34px var(--mono); letter-spacing: -0.02em; color: var(--t1); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lv-fig span { font-size: 13px; color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-empty { margin: 0; font-size: 13px; color: var(--t3); }
+.lv-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.lv-split { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 48px; align-items: start; }
+.lv-side { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.lv-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.lv-rows li { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--t2); min-width: 0; }
+.lv-rows li > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-rv { margin-left: auto; font: 12px var(--mono); color: var(--t3); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+
+/* Today: the header (the brief) */
+.lv-head { display: flex; align-items: flex-end; gap: 32px; }
+.lv-head-l { display: flex; flex-direction: column; gap: 10px; min-width: 0; flex: 1; }
+.lv-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lv-nav .icon-btn.sm { margin-left: 0; }
+.lv-nav .btn { margin-left: 8px; }
+.lv-brief { margin: 0; font-size: 18px; line-height: 26px; color: var(--t2); text-wrap: pretty; }
+.lv-head-r { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.lv-head-r .meter { width: 200px; }
+
+/* the day as a rail */
+.drail { display: flex; flex-direction: column; gap: 8px; }
+.drail-track { position: relative; height: 34px; }
+.drail-seg { position: absolute; top: 0; height: 34px; min-width: 6px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--s-raised); color: var(--t2);
+  font-size: 12px; text-align: left; cursor: pointer; overflow: hidden; transition: background-color var(--d-hover) var(--ease-out), border-color var(--d-hover) var(--ease-out); }
+.drail-seg span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drail-seg:hover { border-color: var(--line-hover); }
+.drail-seg.done { background: var(--pos-soft); color: var(--t1); }
+.drail-seg.doing { background: var(--accent-soft); border-color: var(--accent-edge); color: var(--t1); }
+.drail-now { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--accent); pointer-events: none; }
+.drail-hours { position: relative; height: 14px; }
+.drail-hours span { position: absolute; transform: translateX(-50%); font: 11px var(--mono); color: var(--t3); }
+.drail-hours span:first-child { transform: none; }
+.drail-hours span:last-child { transform: translateX(-100%); }
+
+/* Today: the tasks, one list */
+.lv-tasks .task { border-top: 1px solid var(--line); }
+.lv-tasks .task:first-child { border-top: 0; }
+.lv-tasks .task-row { padding: 10px 4px; border-radius: var(--r-row); }
+.lv-tasks .task-row.timed { grid-template-columns: 20px 44px minmax(0, 1fr) auto; }
+.task-at { font: 12px var(--mono); color: var(--t3); font-variant-numeric: tabular-nums; }
+.task.doing .task-at { color: var(--accent-text); }
+.lv-tasks .task-body { padding: 4px 4px 20px 76px; }
+.lv-side .stuck-list:empty { display: none; }
+.lv-side .notes-box { width: 100%; min-height: 96px; resize: vertical; }
+
+/* level 3: the foot of Today */
+.lv-foot { display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+.lv-foot-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; min-height: 32px; }
+.lv-why { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px; margin-left: -6px; border: 0; border-radius: var(--r-row); background: none; color: var(--t2); font: 500 13px var(--sans); cursor: pointer; }
+.lv-why:hover { background: var(--s-hover); color: var(--t1); }
+.lv-why svg { color: var(--t3); }
+.lv-why-gist { flex: 1; min-width: 0; font-size: 13px; color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-close { margin-left: auto; display: inline-flex; gap: 8px; }
+.lv-close-b { flex-basis: 100%; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--t3); }
+.lv-close-b p { margin: 0; }
+.lv-close-b .checklist { margin: 0; }
+.why-b { padding: 8px 0 4px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 22px; color: var(--t2); }
 .why-b p { margin: 0; max-width: 72ch; }
 .why-b ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
-.day-page .stuck-list, .day-page .stuck-form, .day-page .empty { margin-top: 12px; }
-.day-page .notes-box { width: 100%; min-height: 96px; margin-top: 14px; resize: vertical; }
-.day-page .checklist { margin: 12px 0 0; }
-/* Home: a row's value with a thin bar under it (a week's hours against the target) */
-.home-v { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 160px; }
-.home-v .thin-bar { width: 160px; }
-.home-next { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.home-next .k { font-size: 12px; color: var(--t3); }
-.home-next .tt { font-size: 18px; line-height: 26px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
-.home-later { list-style: none; margin: 0; padding: 0; }
-.home-later li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; color: var(--t2); }
-.home-later li .mono { font-size: 12px; color: var(--t3); }
+
+/* Home: the week as bars, the courses as meters */
+.wk-bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; height: 88px; }
+.wk-day { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.wk-col { position: relative; flex: 1; width: 100%; max-width: 32px; }
+.wk-col i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 4px; }
+.wk-plan { background: var(--s-raised-2); }
+.wk-done { background: var(--accent); }
+.wk-day.off .wk-col::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 1px; background: var(--line-strong); }
+.wk-l { font-size: 11px; color: var(--t3); }
+.wk-day.today .wk-l { color: var(--t1); font-weight: 500; }
+.crs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.crs li { display: grid; grid-template-columns: minmax(0, 120px) minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.crs-n { font-size: 13px; color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crs .meter { height: 3px; }
+.crs .meter > i { background: var(--pos); }
+.crs-v { font: 12px var(--mono); color: var(--t3); }
+
+@media (max-width: 1100px) {
+  .lv-split { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+  .lv-cols { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+}
+@media (max-width: 720px) {
+  .lead { padding: 24px 20px; }
+  .lead-top { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .lead-r { align-items: flex-start; }
+  .lead-note { text-align: left; }
+  .lead-title { font-size: 30px; line-height: 38px; }
+  .lead-timer { font-size: 48px; }
+  .lead-res { margin-left: 0; }
+  .lv-head { flex-direction: column; align-items: stretch; }
+  .lv-head-r { align-items: flex-start; }
+  .lv-tasks .task-body { padding-left: 8px; }
+  .drail-seg span { display: none; }
+}

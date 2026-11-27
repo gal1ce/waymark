@@ -96,6 +96,10 @@ export type Dashboard = {
   beej_done: number; beej_total: number; stuck: (Stuck & { date: string })[]
   tracks: { key: string; label: string; passed: number; total: number; current: string | null }[]
   last_test: { id: number; date: string; score: number; max: number } | null
+  /** this week, Monday first: minutes studied and planned */
+  week_days: { date: string; minutes: number; planned: number; study: boolean }[]
+  /** exam dates of the plan's tracks from today on, nearest first */
+  exams: { key: string; label: string; date: string; days: number }[]
 }
 export type ActivityDay = { date: string; minutes: number; done: number; commits: number; compiles: number; level: number; status: 'off' | 'future' | 'closed' | 'active' | 'past' | 'none' }
 export type Activity = { start: string; today: string; days: ActivityDay[] }

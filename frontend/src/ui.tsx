@@ -175,3 +175,17 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): T | null {
   }, deps)
   return v
 }
+
+/** A level-2 section of Today and Home: a rule above, a heading, a quiet note on the right, then its content. */
+export function Sec({ title, meta, action, children, className, id }: { title: ReactNode; meta?: ReactNode; action?: ReactNode; children?: ReactNode; className?: string; id?: string }) {
+  return (
+    <section className={'lv2' + (className ? ' ' + className : '')} id={id} aria-label={typeof title === 'string' ? title : undefined}>
+      <header className="lv2-h">
+        <h2>{title}</h2>
+        {meta != null && <span className="lv2-m">{meta}</span>}
+        {action && <span className="lv2-a">{action}</span>}
+      </header>
+      {children}
+    </section>
+  )
+}

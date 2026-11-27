@@ -257,3 +257,22 @@ def test_starting_today_on_a_day_off_makes_it_a_study_day(client, monkeypatch):
     assert profile.extra_days() == {"2026-11-28": 0} and profile.study_weekdays() == {0, 2, 4}
     day = state.get_day("2026-11-28")
     assert day["status"] == "active" and day["blocks"] and _titles("2026-11-28")[0] == "The real numbers · study"
+
+
+def test_home_has_the_week_day_by_day_and_the_exams_ahead(client, monkeypatch):
+    _draft_and_approve(client, monkeypatch)
+    asyncio.run(planner.ensure_horizon())
+    first = db.q1("SELECT MIN(date) AS d FROM tasks")["d"]
+    set_now(first + "T10:00")
+    r = client.put("/api/plan/exams", json={"dates": {"analysis": "2027-01-15"}}, headers=H)
+    assert r.status_code == 200, r.text
+    d = client.get("/api/dashboard", headers=H).json()
+    days = d["week_days"]
+    assert len(days) == 7 and [x["date"] for x in days] == sorted(x["date"] for x in days)
+    mine = next(x for x in days if x["date"] == first)
+    est = db.q1("SELECT SUM(est_min) AS m FROM tasks WHERE date=?", (first,))["m"]
+    assert mine["study"] and mine["planned"] == est
+    assert all(x["planned"] == 0 for x in days if not x["study"])
+    assert sum(x["minutes"] for x in days) == d["week_minutes"]
+    ex = d["exams"]
+    assert ex and ex[0]["key"] == "analysis" and ex[0]["date"] == "2027-01-15" and ex[0]["days"] > 0
