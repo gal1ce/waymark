@@ -243,6 +243,13 @@ const TR = {
   'Buttons, links, the selection and focus rings.': 'Düğmeler, linkler, seçim ve odak halkaları.', 'Language of the app': 'Uygulamanın dili',
   'Drag a row to change the order: the first one that is set up answers. Open one for its keys and models.': 'Sırayı değiştirmek için bir satırı sürükle: kurulu olan ilk sağlayıcı cevap verir. Anahtarları ve modelleri için birini aç.',
   // Today and Home (DayView, Dashboard)
+  'Add exam dates': 'Sınav tarihi ekle', 'All {n} courses': '{n} dersin hepsi', '{a} of {b} passed': '{b} üniteden {a} geçildi',
+  'Calendar · {n} more': 'Takvim · {n} tane daha', '{h} behind the plan this week': 'Bu hafta plandan {h} gerideyiz',
+  'in {n} days': '{n} gün sonra', 'Next study day': 'Sıradaki çalışma günü', 'No open sticking points': 'Açık takılma noktası yok',
+  'Nothing scheduled this week.': 'Bu hafta planlanmış başka bir şey yok.', 'now · {unit}': 'şimdi · {unit}', '{n}% right': '%{n} doğru',
+  '{n} study days this week · {h} planned': 'Bu hafta {n} çalışma günü · {h} planlı', 'On plan · {h} still to go this week': 'Plana uygun · bu hafta {h} kaldı',
+  'The week’s plan is done': 'Haftanın planı tamamlandı',
+  'they show up here when a task goes long, a test answer is wrong, or you add one': 'bir görev uzarsa, bir test cevabı yanlışsa ya da sen eklersen burada görünür',
   // Today and Home: levels
   '1 is done.': 'Biri bitti.', '{d} are done.': '{d} tanesi bitti.', '{a} in, about {b} to go': '{a} geçti, yaklaşık {b} kaldı', '{a} in, past its estimate of {b}': '{a} geçti, {b} olan tahmin aşıldı',
   'all done': 'hepsi bitti', '{a} of {b} today': 'bugün {a} / {b}', 'Back to today': 'Bugüne dön',
