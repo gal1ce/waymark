@@ -15,6 +15,7 @@ import asyncio
 import json
 import os
 import re
+import subprocess
 import tempfile
 import time
 import uuid
@@ -408,7 +409,42 @@ _ALIASES = {"claude_code": [("sonnet", "Sonnet (newest)"), ("opus", "Opus (newes
             "gemini_cli": [("pro", "Gemini Pro (newest)"), ("flash", "Gemini Flash (newest)"),
                            ("flash-lite", "Gemini Flash-Lite (newest)"), ("auto", "Auto (the CLI picks per request)")]}
 
+# ... and by full name, for one version in particular. Claude Code takes any model's full name but has no command that
+# lists them, so these are the Claude models a subscription can reach (a plan reaches only the ones it includes);
+# another name can still be typed in the picker. The Gemini CLI lists what the signed-in account can use itself.
+_CLAUDE_MODELS = [("claude-fable-5-2", "Claude Fable 5.2 (Max plans)"), ("claude-opus-5-5", "Claude Opus 5.5"),
+                  ("claude-opus-5", "Claude Opus 5"), ("claude-opus-4-8", "Claude Opus 4.8"),
+                  ("claude-opus-4-7", "Claude Opus 4.7"), ("claude-opus-4-6", "Claude Opus 4.6"),
+                  ("claude-sonnet-5-5", "Claude Sonnet 5.5"), ("claude-sonnet-5", "Claude Sonnet 5"),
+                  ("claude-sonnet-4-6", "Claude Sonnet 4.6"), ("claude-haiku-5-5", "Claude Haiku 5.5"),
+                  ("claude-haiku-4-5", "Claude Haiku 4.5")]
+_LISTED: dict[str, tuple[float, list[tuple[str, str]]]] = {}
+LIST_TTL = 600
 
-def catalog(pid: str) -> list[dict]:
-    return [{"id": i, "name": n, "context": 0, "free": False, "price": "", "chat": True, "created": 0}
-            for i, n in _ALIASES.get(pid, [])]
+
+def _gemini_listed(exe: str) -> list[tuple[str, str]]:
+    """`gemini --list-models`: the models the signed-in account can use, as (id, name). Empty when it can't tell."""
+    try:
+        r = subprocess.run([exe, "--list-models"], capture_output=True, text=True, timeout=45, cwd=_workdir(),
+                           env=_env(_GEMINI_AUTH), stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    out = []
+    for line in r.stdout.splitlines():
+        m = re.fullmatch(r"([A-Za-z0-9][\w.\-]*) \((.+)\)", line.strip())
+        if m:
+            out.append((m.group(1), m.group(2)))
+    return out
+
+
+async def catalog(pid: str, fresh: bool = False) -> list[dict]:
+    """The aliases first, then the full names (Gemini: as its program lists them, kept for ten minutes)."""
+    named = list(_CLAUDE_MODELS) if pid == "claude_code" else []
+    if pid == "gemini_cli" and (exe := providers.installed(pid)):
+        hit = _LISTED.get(pid)
+        if fresh or not hit or time.time() - hit[0] > LIST_TTL:
+            hit = _LISTED[pid] = (time.time(), await asyncio.to_thread(_gemini_listed, exe))
+        named = hit[1]
+    seen = {i for i, _n in _ALIASES.get(pid, [])}
+    rows = _ALIASES.get(pid, []) + [(i, n) for i, n in named if i not in seen]
+    return [{"id": i, "name": n, "context": 0, "free": False, "price": "", "chat": True, "created": 0} for i, n in rows]

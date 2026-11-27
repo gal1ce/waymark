@@ -387,7 +387,7 @@ async def catalog(pid: str, key: str | None = None, fresh: bool = False) -> list
         ks = providers.keys(pid)
         key = ks[0] if ks else ""
     if PROVIDERS[pid].kind == "cli":
-        return cli.catalog(pid)
+        return await cli.catalog(pid, fresh)
     if PROVIDERS[pid].needs_key and not key:
         raise providers.SetupError(f"Add a {PROVIDERS[pid].label} key first.")
     slot = (pid, providers.base(pid))
@@ -412,7 +412,7 @@ async def list_models(pid: str, key: str | None = None) -> list[str]:
         ks = providers.keys(pid)
         key = ks[0] if ks else ""
     if PROVIDERS[pid].kind == "cli":
-        return [c["id"] for c in cli.catalog(pid)]
+        return [c["id"] for c in await cli.catalog(pid)]
     if PROVIDERS[pid].needs_key and not key:
         raise providers.SetupError(f"Add a {PROVIDERS[pid].label} key first.")
     if PROVIDERS[pid].kind == "anthropic":
