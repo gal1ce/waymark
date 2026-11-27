@@ -703,7 +703,7 @@ def status() -> dict:
         # elapsed on the server's own monotonic clock: right even when the app runs on a demo clock
         st["progress"] = {"phase": _progress.get("phase", "thinking"), "elapsed": int(time.monotonic() - _progress["t0"]),
                           "chars": _progress.get("chars", 0), "units": _progress.get("units", 0),
-                          "tracks": _progress.get("tracks", [])}
+                          "tracks": _progress.get("tracks", []), "searches": _progress.get("searches", 0)}
     return {**st, "plan": profile.key(), "has_api_key": has_api_key()}
 
 
@@ -739,10 +739,17 @@ async def run() -> None:
         return
     _running.add("draft")
     _progress.clear()
-    _progress.update(phase="thinking", t0=time.monotonic(), chars=0, units=0, tracks=[])
+    _progress.update(phase="thinking", t0=time.monotonic(), chars=0, units=0, tracks=[], searches=0)
     written: list[str] = []
 
     def on(kind: str, val) -> None:
+        if kind == "tool" and val == "web_search":
+            _progress["searches"] = _progress.get("searches", 0) + 1   # a subscription looks sources up first
+            return
+        if kind == "restart":   # what was written goes; it is written again
+            written.clear()
+            _progress.update(phase="thinking", chars=0, units=0, tracks=[])
+            return
         if kind != "text":
             return
         written.append(val)
@@ -754,8 +761,9 @@ async def run() -> None:
     try:
         a = st["answers_full"]
         earlier = _model_view(st["draft"]["plan"]) if st.get("change") and st.get("draft") else None
-        raw = await llm.structured_live(DRAFT_SYSTEM, _prompt(a, earlier, st.get("change") or ""), DRAFT_SCHEMA, on,
-                                        effort="high", max_tokens=48000)
+        with llm.web_search():   # a subscription looks real, current sources up first
+            raw = await llm.structured_live(DRAFT_SYSTEM, _prompt(a, earlier, st.get("change") or ""), DRAFT_SCHEMA, on,
+                                            effort="high", max_tokens=48000)
         _scan("".join(written))
         _progress["phase"] = "checking"
         a, coded = _programming(raw, a, st.get("change") or "")

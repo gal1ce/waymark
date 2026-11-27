@@ -798,6 +798,7 @@ function Drafting({ ob, ctx, changing }: { ob: Onboarding; ctx: Ctx; changing: b
             <li key={x.k} className={n < at ? 'done' : n === at ? 'cur' : ''}>
               <span className="wz-ph-m" aria-hidden>{n < at ? <Check size={12} strokeWidth={2.6} /> : n === at ? <span className="wz-ph-road" /> : null}</span>
               <span className="wz-ph-t">{t(x.l)}
+                {x.k === 'thinking' && n === at && (p?.searches ?? 0) > 0 && <span className="wz-ph-d">{t('{n} web searches so far', { n: p!.searches! })}</span>}
                 {x.k === 'writing' && n === at && (p?.units ?? 0) > 0 && <span className="wz-ph-d">{t('{n} units so far', { n: p!.units })}</span>}
               </span>
             </li>

@@ -173,3 +173,31 @@ def test_an_extra_day_left_unstudied_does_not_break_the_streak(client, monkeypat
     mins = {"2026-11-25": 60, "2026-11-27": 60, "2026-11-30": 60}
     set_now("2026-11-30T20:00")
     assert insights._streaks(mins)[0] == 3
+
+
+def test_only_the_plan_draft_and_the_coach_may_search_the_web(client, monkeypatch):
+    """The draft is written inside llm.web_search() (a subscription looks sources up first) and its progress counts the
+    searches; a search after words went out starts the draft text again. Days are planned without it."""
+    from app import llm
+    from test_custom_plan import model_draft
+    seen = []
+
+    async def live(system, prompt, schema, on, effort="medium", max_tokens=16000, role="main"):
+        seen.append(("draft", llm._WEB.get()))
+        on("text", '{"objective": "x"')
+        on("restart", "Searching the web")
+        on("tool", "web_search")
+        assert onboarding._progress["searches"] == 1 and onboarding._progress["chars"] == 0
+        return model_draft()
+
+    async def structured(system, prompt, schema, effort="medium", max_tokens=16000, role="main"):
+        seen.append(("day", llm._WEB.get()))
+        raise RuntimeError("no model in tests")
+    monkeypatch.setattr(llm, "structured_live", live)
+    monkeypatch.setattr(llm, "structured", structured)
+    client.post("/api/onboarding/draft", json={"answers": ANSWERS}, headers=H)
+    asyncio.run(onboarding.run())
+    assert client.get("/api/onboarding").json()["status"] == "ready"
+    client.post("/api/onboarding/approve", json={"confirm": True}, headers=H)
+    asyncio.run(planner.ensure_horizon())
+    assert seen[0] == ("draft", True) and ("day", True) not in seen and ("day", False) in seen

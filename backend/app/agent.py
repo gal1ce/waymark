@@ -3,6 +3,7 @@ no-solutions / 30-minute rule enforced both in the prompt and on the output."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import contextvars
 import json
 import logging
@@ -77,6 +78,7 @@ def tools() -> list[dict]:
 
 
 TOOL_LABEL = {
+    "web_search": "Searching the web",
     "get_day": "Looking at your day", "get_history": "Reading your recent days", "read_file": "Reading a file",
     "list_files": "Browsing files", "add_stuck_point": "Logging a sticking point", "resolve_stuck_point": "Closing a sticking point",
     "add_day_note": "Adding a day note", "append_coach_log": "Writing to the coach log", "update_future_day": "Re-planning a future day",
@@ -590,30 +592,32 @@ async def chat_events(user_text: str, cid: int, closed: bool = False):
         yield {"type": "status", "phase": "thinking"}
         for _ in range(8):
             buf, resp = "", None
-            async for kind, val in llm.stream(system=_system(), messages=messages, tools=None if closed else tools(), effort=coach.settings()["effort"],
-                                              max_tokens=max_tokens, role="chat"):
-                if kind == "restart":
-                    # the provider broke off mid-reply; the next key or provider writes it again from the start
-                    buf = ""
-                    vis = _visible(joined(), learning)
-                    yield {"type": "replace", "text": vis}
-                    yield {"type": "status", "phase": "thinking", "label": val}
-                    shown = vis
-                elif kind == "switch":
-                    yield {"type": "status", "phase": "thinking", "label": f"Trying {val[1]}"}
-                elif kind == "text":
-                    buf += val
-                    vis = _visible(joined(buf), learning)
-                    if vis.startswith(shown):
-                        if len(vis) > len(shown):
-                            yield {"type": "delta", "text": vis[len(shown):]}
-                    else:
+            # a subscription may look current things up (cli.stream); never during a graded test (closed book)
+            with contextlib.nullcontext() if closed else llm.web_search():
+                async for kind, val in llm.stream(system=_system(), messages=messages, tools=None if closed else tools(), effort=coach.settings()["effort"],
+                                                  max_tokens=max_tokens, role="chat"):
+                    if kind == "restart":
+                        # the provider broke off mid-reply; the next key or provider writes it again from the start
+                        buf = ""
+                        vis = _visible(joined(), learning)
                         yield {"type": "replace", "text": vis}
-                    shown = vis
-                elif kind == "tool":
-                    yield {"type": "status", "phase": "tool", "tool": val, "label": tool_label(val)}
-                elif kind == "final":
-                    resp = val
+                        yield {"type": "status", "phase": "thinking", "label": val}
+                        shown = vis
+                    elif kind == "switch":
+                        yield {"type": "status", "phase": "thinking", "label": f"Trying {val[1]}"}
+                    elif kind == "text":
+                        buf += val
+                        vis = _visible(joined(buf), learning)
+                        if vis.startswith(shown):
+                            if len(vis) > len(shown):
+                                yield {"type": "delta", "text": vis[len(shown):]}
+                        else:
+                            yield {"type": "replace", "text": vis}
+                        shown = vis
+                    elif kind == "tool":
+                        yield {"type": "status", "phase": "tool", "tool": val, "label": tool_label(val)}
+                    elif kind == "final":
+                        resp = val
             content = [b.to_dict() for b in resp.content]
             messages.append({"role": "assistant", "content": content})
             step_text = llm.text_of(resp)
