@@ -1149,6 +1149,7 @@ const TR = {
   "Question for {name}": "{name} için soru",
   "Ask": "Sor",
   // what the coach did on the way (Coach.tsx Steps); the labels come from the server (agent.tool_label)
+  'Show all': 'Tümünü göster', 'Show less': 'Daha az göster',
   'running': 'sürüyor', 'failed': 'başarısız', '{n} steps': '{n} adım', 'one failed': 'biri başarısız',
   'Suggested replies': 'Önerilen yanıtlar', 'Click to send': 'Göndermek için tıkla', 'Click to send · Tab puts it in the box': 'Göndermek için tıkla · Tab kutuya yazar',
   'Looking at your day': 'Gününe bakıyor', 'Reading your recent days': 'Son günlerini okuyor', 'Reading a file': 'Dosya okuyor',
