@@ -4290,3 +4290,131 @@ body.is-sorting, body.is-sorting * { cursor: grabbing !important; user-select: n
   .lv-tasks .task-body { padding-left: 8px; }
   .drail-seg span { display: none; }
 }
+
+/* ---------------------------------------------------------------- the composer
+   One surface: the text on top, a toolbar under it (the coach's mode on the left; model, effort and send on the right).
+   Radii are concentric: the box is 20px, its padding 10px, so the send button and the chips inside are 10px. */
+.composer { display: block; padding: 0 12px 12px; border-top: 0; container-type: inline-size; }
+.composer.big { padding: 0; background: none; border: 0; border-radius: 0; box-shadow: none; }
+.cbox { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 12px 10px 10px 14px; border-radius: 20px;
+  background: var(--s-raised); border: 1px solid var(--line); box-shadow: var(--lift); cursor: text;
+  transition: border-color var(--d-hover) var(--ease-out); }
+.cbox:hover { border-color: var(--line-strong); }
+.cbox:focus-within { border-color: var(--line-hover); }
+.composer .cbox textarea, .composer .cbox textarea:focus, .composer .cbox textarea:hover:not(:disabled):not(:focus) {
+  display: block; width: 100%; min-height: 22px; max-height: 40vh; margin: 0; padding: 0 4px 0 0; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none; outline: none; resize: none; field-sizing: content;
+  font-size: 14.5px; line-height: 22px; color: var(--t1); }
+.composer.big .cbox { padding: 16px 12px 12px 18px; border-radius: 24px; }
+.composer.big .cbox textarea { min-height: 48px; font-size: 15.5px; line-height: 24px; }
+.nix-hello .composer.big .cbox textarea { min-height: 72px; }
+.cbox .type-hint { left: 18px; top: 16px; right: 18px; }
+
+.cbar { display: flex; align-items: center; gap: 4px; min-height: 32px; min-width: 0; }
+.cbar-gap { flex: 1; }
+.cbar-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px 0 8px; margin-left: -6px; border: 0; border-radius: 10px;
+  background: none; color: var(--t3); font-size: 12.5px; white-space: nowrap; min-width: 0; cursor: default;
+  transition: background-color var(--d-hover) var(--ease-out), color var(--d-hover) var(--ease-out); }
+.cbar-chip span { overflow: hidden; text-overflow: ellipsis; }
+.cbar-chip svg { flex: none; }
+.cbar-chip:hover, .cbar-chip:focus-visible { background: var(--s-hover); color: var(--t2); outline: none; }
+.cbar-chip.act { margin-left: 0; padding: 0 10px; color: var(--accent-text); cursor: pointer; }
+.cbar-model { display: inline-flex; align-items: center; min-width: 0; font-size: 12.5px; color: var(--t2); }
+.cbar-name { padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 18ch; }
+.cbar-eff select { appearance: none; height: 30px; padding: 0 8px; border: 0; border-radius: 10px; background: none; color: var(--t3); font: inherit; cursor: pointer;
+  transition: background-color var(--d-hover) var(--ease-out), color var(--d-hover) var(--ease-out); }
+.cbar-eff select:hover { background: var(--s-hover); color: var(--t2); }
+.cbar-eff select:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 0; }
+.composer .cbox .send { position: static; flex: none; display: grid; place-items: center; width: 32px; height: 32px; margin-left: 4px; padding: 0;
+  border: 0; border-radius: 10px; background: var(--s-hover); color: var(--t3); box-shadow: none; cursor: default;
+  transition: background-color var(--d-hover) var(--ease-out), color var(--d-hover) var(--ease-out), transform var(--d-press) var(--ease-out); }
+.composer .cbox .send.on { background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+.composer .cbox .send.on:hover { background: var(--accent-hi); }
+.composer .cbox .send.stop { background: var(--t1); color: var(--s-page); cursor: pointer; }
+.composer .cbox .send:active:not(:disabled) { transform: scale(var(--press)); }
+.composer .cbox .send:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+@container (max-width: 380px) { .cbar-name { display: none; } }
+@container (max-width: 300px) { .cbar-chip:not(.act) span { display: none; } }
+
+/* the Ask popup's box follows the same rule: a rounded field with a smaller rounded button tucked in its corner */
+.ask-compose .ask-input { border-radius: 16px; }
+.ask-compose .send { right: 19px; bottom: 19px; width: 30px; height: 30px; border-radius: 9px; }
+
+/* ---------------------------------------------------------------- the coach as a floating window
+   The side panel, whole, in a window over the page: moved by its head, sized from its corner (resize: both). It sits
+   over full-screen tests and sheets too, under dialogs and toasts. */
+.coach-float {
+  position: fixed; z-index: 47; display: flex; min-width: 320px; min-height: 320px;
+  max-width: calc(100vw - 16px); max-height: calc(100vh - 16px);
+  border-radius: 16px; overflow: hidden; resize: both;
+  border: 1px solid var(--line-strong); box-shadow: var(--shadow-pop);
+  animation: enter var(--d-enter) var(--ease-out);
+}
+.coach-float .coach { flex: 1; height: auto; border: 0; grid-area: auto; }
+.coach.floating > * { animation: none; }
+.coach.floating .coach-head { cursor: grab; user-select: none; touch-action: none; }
+.coach.floating .coach-head:active { cursor: grabbing; }
+.coach.floating .coach-head button { cursor: pointer; }
+@media (max-width: 860px) {
+  .coach-float { left: 8px !important; right: 8px !important; top: auto !important; bottom: calc(8px + var(--tabbar, 0px)) !important;
+    width: auto !important; height: min(70vh, 560px) !important; resize: none; }
+  .coach-float .coach { position: relative; inset: auto; z-index: auto; padding: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .coach-float { animation: none; } }
+
+/* ---------------------------------------------------------------- narrow columns
+   Settings rows: the label keeps a readable width and the value wraps beside it instead of pushing it to one word a
+   line; a field never pokes out of its column. */
+.sr { grid-template-columns: minmax(min(168px, 45%), 1fr) minmax(0, auto); }
+.sr.stack, .sr:not(:has(.sr-c)) { grid-template-columns: minmax(0, 1fr); }
+.sr-v { overflow-wrap: anywhere; }
+.sr-c > .ctl-select, .sr-c .mp-btn, .sr-c > .sr-in { max-width: 100%; }
+.sr-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; }
+.sr-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.sr-list li:first-child { border-top: 0; }
+.sr-list-l { min-width: 0; color: var(--t2); overflow-wrap: anywhere; }
+.sr-list-v { flex: none; font-family: var(--figs); font-size: 12px; color: var(--t3); }
+
+/* Today's focus card follows its own width (the coach panel beside it narrows it as much as a small window does):
+   the timer goes under the title, and the sources take their own line under the buttons, each one wrapping its label
+   inside its tile rather than spilling over the next. */
+.lead { container: lead / inline-size; }
+.lead-res { flex: 1 1 240px; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.lead-res .res a, .lead-res .res button, .lead-res .res .res-ref { height: auto; min-height: 28px; padding: 4px 10px; line-height: 18px; text-align: left; max-width: 100%; }
+@container lead (max-width: 640px) {
+  .lead-top { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .lead-r { align-items: flex-start; min-width: 0; }
+  .lead-r .meter { width: 100%; }
+  .lead-note { text-align: left; }
+  .lead-res { flex-basis: 100%; margin-left: 0; justify-content: flex-start; }
+}
+@container lead (max-width: 420px) {
+  .lead-acts > .btn { flex: 1 1 auto; justify-content: center; }
+}
+
+/* Today follows its own width too: with the coach docked beside it the page is as narrow as a small window */
+.lv-page { container: lvpage / inline-size; }
+.lv-nav { flex-wrap: nowrap; }
+.lv-nav .eyebrow { flex: 0 1 auto; min-width: 0; }
+.lv-nav .btn { flex: none; }
+@container lvpage (max-width: 900px) {
+  .lv-split { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+  .lv-tiles { grid-template-columns: minmax(0, 1fr); }
+}
+@container lvpage (max-width: 560px) {
+  .lv-head { flex-direction: column; align-items: stretch; gap: 16px; }
+  .lv-head-r { align-items: flex-start; }
+  .lv-head-r .meter { width: 100%; }
+}
+
+/* dragging the coach: the docked head can be pulled off the side; a floating window let go at a side docks there,
+   and while it is held there the place it would take shows */
+.shell .coach:not(.floating) .coach-head { cursor: grab; touch-action: none; }
+.shell .coach:not(.floating) .coach-head:active { cursor: grabbing; }
+.coach .coach-head button { cursor: pointer; }
+.coach-dock-hint { position: fixed; top: 8px; bottom: 8px; z-index: 46; width: min(var(--coach-w, 400px), 50vw); border-radius: 16px;
+  background: var(--accent-soft); border: 2px dashed var(--accent-line); pointer-events: none; animation: fade var(--d-hover) var(--ease-out); }
+.coach-dock-hint.right { right: 8px; }
+.coach-dock-hint.left { left: 8px; }
+.coach-float.snapping { opacity: 0.85; }
+@media (max-width: 860px) { .coach-dock-hint { display: none; } }

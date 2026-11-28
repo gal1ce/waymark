@@ -238,6 +238,10 @@ export function DayRail({ day, times, onPick }: { day: Day; times: Map<number, {
   )
 }
 
+/** Problem and review tasks: the app writes their problems and checks them (Practice set), so nothing has to be
+    looked up in a book. */
+const solvesInApp = (t: Task) => t.kind === 'practice' || t.kind === 'review'
+
 /** The first paragraph of a task's text, without the markdown. */
 const gist = (md: string | null | undefined) => {
   const p = (md ?? '').trim().split(/\n\s*\n/)[0] ?? ''
@@ -298,6 +302,14 @@ function Focus({ task, next, live, ctx, day, times, onDetails }: {
           <button className="btn lg" {...bp('pause')} onClick={() => act(t.id, 'pause')}><Pause size={15} strokeWidth={1.6} />{tr('Pause')}</button>
         </> : (
           <button className="btn primary lg" autoFocus {...bp('start')} onClick={() => act(t.id, 'start')}><Play size={15} strokeWidth={1.6} />{tr('Start')}</button>
+        )}
+        {solvesInApp(t) && day.status === 'active' && (
+          <button className="btn lg" {...bp('practice')} title={tr('Original problems of the same kind, checked in the app; the ones you miss become sticking points')}
+            onClick={() => { setWhich('practice'); run(async () => {
+              if (t.status === 'todo') await ctx.run(api.task(t.id, 'start'))   // the set's time counts as the task's
+              const r = await ctx.run(api.practiceSet(t.id))
+              if (r) ctx.go({ kind: 'test', id: r.id })
+            }) }}><BookOpen size={15} strokeWidth={1.6} />{tr('Practice set')}</button>
         )}
         <button type="button" className="btn ghost lg" onClick={() => onDetails(t.id)}>{tr('Details')}</button>
         <span className="lead-res"><Resources task={t} ctx={ctx} inline /></span>
@@ -550,7 +562,7 @@ function TaskRow({ t, day, live, ctx, at, pick }: { t: Task; day: Day; live: (t:
   const compileFail = t.compile?.type === 'compile_fail'
   const skipped = t.status === 'done' && t.meta.skipped && typeof t.meta.skipped === 'object' ? t.meta.skipped as { percent?: number } : null
   const isTest = t.kind === 'test' || t.kind === 'c_quiz' || t.kind === 'unit_quiz'  // its main action is preparing the test
-  const quietStart = isTest || t.kind === 'khan_test' || t.kind === 'khan_study'   // the unit test button / the unit's next step is the main action there
+  const quietStart = isTest || t.kind === 'khan_test' || t.kind === 'khan_study' || solvesInApp(t)   // the unit test button / the unit's next step / the practice set is the main action there
   const [busy, run] = useBusy()
   const [which, setWhich] = useState('')
   const act = (a: 'start' | 'pause' | 'done' | 'reopen') => {
@@ -625,8 +637,9 @@ function TaskRow({ t, day, live, ctx, at, pick }: { t: Task; day: Day; live: (t:
               {t.kind === 'read' && typeof t.meta.track === 'string' && typeof t.meta.lesson !== 'string' && <button className="btn" {...bp('lesson')}
                 title={tr('A short lesson in the app: the idea, the definitions, a worked example of a different problem, common mistakes and what to read next')}
                 onClick={() => { setWhich('lesson'); run(async () => { if (await ctx.run(api.lesson(t.id))) ctx.refresh() }) }}><GraduationCap size={14} strokeWidth={1.5} />{tr('Lesson')}</button>}
-              {t.kind === 'practice' && <button className="btn" {...bp('practice')} title={tr('Original problems of the same kind, checked in the app; the ones you miss become sticking points')}
+              {solvesInApp(t) && <button className="btn primary" {...bp('practice')} title={tr('Original problems of the same kind, checked in the app; the ones you miss become sticking points')}
                 onClick={() => { setWhich('practice'); run(async () => {
+                  if (t.status === 'todo') await ctx.run(api.task(t.id, 'start'))   // the set's time counts as the task's
                   const r = await ctx.run(api.practiceSet(t.id))
                   if (r) ctx.go({ kind: 'test', id: r.id })
                 }) }}><BookOpen size={14} strokeWidth={1.5} />{tr('Practice set')}</button>}

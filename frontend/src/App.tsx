@@ -17,7 +17,7 @@ import TestPage, { TestsList } from './TestPage'
 import { KhanTestPage } from './Khan'
 import Reader from './Reader'
 import BeejPage from './BeejPage'
-import { AskPopup, CoachAvatar, CoachPanel, Recents, startNewChat } from './Coach'
+import { AskPopup, CoachAvatar, CoachPanel, CoachWindow, Recents, startNewChat, type Grab } from './Coach'
 import NixPage from './Nix'
 import Tip from './Tip'
 import Notes from './Notes'
@@ -147,9 +147,16 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [reader, setReader] = useState<string | null>(null)
   const [coachOpen, setCoachOpen] = useState(() => store.get('ctu.coach', false))
+  // the coach as a floating window instead of a column beside the page
+  const [coachFloat, setCoachFloat] = useState(() => store.get('ctu.coachFloat', false))
+  const [grab, setGrab] = useState<Grab | null>(null)   // the panel was just dragged off the side: the window follows on
   // the side: a wide sidebar (new chat, the pages, recent conversations) or the slim rail of icons
   const [navWide, setNavWide] = useState(() => store.get('ctu.navWide', true))
   const wide = useWide()
+  // below this width a docked coach panel and the full sidebar leave the page a strip: the sidebar shows its icons
+  // only while the panel is open (the saved choice stays; the toggle still opens it for now)
+  const roomy = useWide('(min-width: 1180px)')
+  const [navPeek, setNavPeek] = useState(false)
   useEffect(() => store.set('ctu.navWide', navWide), [navWide])
   const [coachW, setCoachW] = useState(() => num.get('ctu.coachW', COACH_W))
   const [resizing, setResizing] = useState(false)
@@ -220,14 +227,15 @@ export default function App() {
     return () => window.removeEventListener('hashchange', on)
   }, [])
   useEffect(() => store.set('ctu.coach', coachOpen), [coachOpen])
+  useEffect(() => store.set('ctu.coachFloat', coachFloat), [coachFloat])
   // full-screen sheets (unit test, practice, video) are portalled to <body>: tell them where the coach panel is,
   // so "Open in panel" from a test shows the panel beside the sheet instead of behind it
   useEffect(() => {
     const b = document.body
-    b.classList.toggle('coach-on', coachOpen && view.kind !== 'nix')
+    b.classList.toggle('coach-on', coachOpen && !coachFloat && view.kind !== 'nix')
     b.dataset.coach = layout.coach
     b.style.setProperty('--sheet-coach', `min(${clampCoach(coachW)}px, 50vw)`)
-  }, [coachOpen, coachW, layout.coach, view.kind])
+  }, [coachOpen, coachFloat, coachW, layout.coach, view.kind])
   useEffect(() => num.set('ctu.coachW', coachW), [coachW])
 
   // shared data: meta, overview, today's day (used by the top bar, dashboard and coach)
@@ -319,7 +327,9 @@ export default function App() {
   }
   const noPlan = !!meta && !meta.plan.ready
   const onNix = view.kind === 'nix' && !noPlan
-  const sideCoach = coachOpen && !onNix
+  const sideCoach = coachOpen && !onNix && !coachFloat
+  const navOpen = navWide && (roomy || !sideCoach || navPeek)
+  const floatCoach = coachOpen && !onNix && coachFloat
 
   const ph = { size: 20 }
   const nav: { label: string; icon: ReactNode; v: View; on: boolean }[] = [
@@ -346,7 +356,7 @@ export default function App() {
   )
 
   return (
-    <div className={`shell nav-${layout.nav}${navWide ? ' nav-wide' : ''} coach-${layout.coach}${sideCoach ? ' coach-on' : ''}${resizing ? ' resizing' : ''}`}
+    <div className={`shell nav-${layout.nav}${navOpen ? ' nav-wide' : ''} coach-${layout.coach}${sideCoach ? ' coach-on' : ''}${resizing ? ' resizing' : ''}`}
       style={{ '--coach-w': `${sideCoach ? clampCoach(coachW) : coachW}px` } as React.CSSProperties}>
       <header className="topbar">
         <button className="wordmark" onClick={() => go({ kind: 'dash' })} aria-label={t('Waymark, home')}>
@@ -380,10 +390,10 @@ export default function App() {
       <aside className="side" aria-label={t('Navigation')}>
         {/* the sidebar's own top: the brand and the toggle, on the top bar's line; collapsed, the toggle shows on hover */}
         <div className="side-top">
-          <button className="wordmark side-brand" onClick={() => go({ kind: 'dash' })} aria-label={t('Waymark, home')} tabIndex={navWide ? 0 : -1}>
+          <button className="wordmark side-brand" onClick={() => go({ kind: 'dash' })} aria-label={t('Waymark, home')} tabIndex={navOpen ? 0 : -1}>
             <BrandMark /><span className="wm-text">Way<em>mark</em></span>
           </button>
-          <button className="icon-btn side-toggle" onClick={() => setNavWide((w) => !w)} aria-label={navWide ? t('Collapse the sidebar') : t('Expand the sidebar')} title={navWide ? t('Collapse the sidebar') : t('Expand the sidebar')}>
+          <button className="icon-btn side-toggle" onClick={() => { setNavWide(!navOpen); setNavPeek(!navOpen) }} aria-label={navOpen ? t('Collapse the sidebar') : t('Expand the sidebar')} title={navOpen ? t('Collapse the sidebar') : t('Expand the sidebar')}>
             <PhSidebar size={20} />
           </button>
         </div>
@@ -394,7 +404,7 @@ export default function App() {
         )}
         <nav className="nav">
           {nav.map((n) => (
-            <button key={n.label} className={'nav-row' + (n.on ? ' on' : '')} title={navWide ? undefined : n.label}
+            <button key={n.label} className={'nav-row' + (n.on ? ' on' : '')} title={navOpen ? undefined : n.label}
               aria-current={n.on ? 'page' : undefined} onClick={() => go(n.v)}>
               {n.icon}<span className="nav-label">{n.label}</span>
             </button>
@@ -448,7 +458,11 @@ export default function App() {
         <Scrollbar key={view.kind + ('id' in view ? String(view.id) : '')} target={mainRef} />
       </div>
 
-      {sideCoach && <CoachPanel ctx={ctx} current={current} hasKey={!!meta?.has_api_key} locked={exam} onClose={() => setCoachOpen(false)} />}
+      {sideCoach && <CoachPanel ctx={ctx} current={current} hasKey={!!meta?.has_api_key} locked={exam} onClose={() => setCoachOpen(false)} onFloat={() => { setGrab(null); setCoachFloat(true) }}
+        onTearOff={(g) => { setGrab(g); setCoachFloat(true) }} />}
+      {floatCoach && <CoachWindow ctx={ctx} current={current} hasKey={!!meta?.has_api_key} locked={exam} grab={grab}
+        onClose={() => setCoachOpen(false)} onFloat={() => { setGrab(null); setCoachFloat(false) }}
+        onDock={(side) => { setGrab(null); setCoachFloat(false); if (side !== layout.coach) setLayout({ coach: side }) }} />}
 
       {menu && (
         <>
@@ -558,15 +572,14 @@ function useDismiss(open: boolean, close: () => void) {
 }
 
 /** Desktop width: the sidebar is a column (not the phone's tab bar), so the account and counters live at its foot. */
-function useWide() {
-  const q = '(min-width: 861px)'
+function useWide(q = '(min-width: 861px)') {
   const [wide, setWide] = useState(() => window.matchMedia(q).matches)
   useEffect(() => {
     const m = window.matchMedia(q)
     const on = () => setWide(m.matches)
     m.addEventListener('change', on)
     return () => m.removeEventListener('change', on)
-  }, [])
+  }, [q])
   return wide
 }
 

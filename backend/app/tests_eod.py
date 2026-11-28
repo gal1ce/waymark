@@ -444,6 +444,7 @@ def public_view(tid: int) -> dict:
     t["threshold"] = _threshold_label(t)
     if t["status"] in ("generating", "ready", "failed") and (lv := _LIVE.get(tid)):
         t["live"] = lv
+    t["trace"] = trace_of(tid)
     if t["kind"] == "practice":
         sp = practice.spec_of(tid)
         t["practice"] = {k: sp.get(k) for k in ("topics", "count", "asked", "level", "level_why", "follow_of")}
@@ -487,6 +488,22 @@ def _threshold_label(t: dict) -> str:
     return "The end-of-day test is a measurement, not a threshold: wrong answers become sticking points and go into tomorrow's plan."
 
 
+def trace_of(tid: int) -> dict:
+    """How each question went, as the test page saw it: {qid: {sec, visits, changes}} (seconds on the question,
+    times it was opened, times a given answer was changed to another)."""
+    return db.kv_get(f"test_trace_{tid}", {}) or {}
+
+
+def _keep_trace(tid: int, trace: dict | None) -> None:
+    if not trace:
+        return
+    clean = {}
+    for qid, v in trace.items():
+        if isinstance(v, dict):
+            clean[str(qid)[:20]] = {k: max(0, min(int(v.get(k) or 0), 10**6)) for k in ("sec", "visits", "changes")}
+    db.kv_set(f"test_trace_{tid}", clean)
+
+
 def start(tid: int) -> None:
     t = db.q1("SELECT * FROM tests WHERE id=?", (tid,))
     if not t:
@@ -495,13 +512,15 @@ def start(tid: int) -> None:
         state.require_active(t["date"])
     if t["status"] == "ready":
         db.ex("UPDATE tests SET status='in_progress', started_at=? WHERE id=?", (db.ts(), tid))
+        state.log_event("test_resumed" if t["used_sec"] else "test_started", t["task_id"], {"test_id": tid, "kind": t["kind"]})
         bus.publish("test", {"id": tid})
 
 
-def save_answers(tid: int, answers: dict) -> None:
+def save_answers(tid: int, answers: dict, trace: dict | None = None) -> None:
     t = db.q1("SELECT status FROM tests WHERE id=?", (tid,))
     if t and t["status"] == "in_progress":
         db.ex("UPDATE tests SET answers=? WHERE id=?", (json.dumps(answers, ensure_ascii=False), tid))
+        _keep_trace(tid, trace)
 
 
 SHORT_GRADE = llm.strict({"type": "object", "properties": {"grades": {"type": "array", "items": {
@@ -514,7 +533,7 @@ def _used(t: dict) -> int:
     return int((t.get("used_sec") or 0) + max(0, run))
 
 
-def leave(tid: int, answers: dict) -> dict:
+def leave(tid: int, answers: dict, trace: dict | None = None) -> dict:
     """Step out of a test without grading it: answers and the time used are kept, the clock stops,
     and Resume carries on from there. Nothing is scored and nothing becomes a sticking point."""
     t = db.q1("SELECT * FROM tests WHERE id=?", (tid,))
@@ -522,6 +541,9 @@ def leave(tid: int, answers: dict) -> dict:
         raise state.Refused("Only a test in progress can be left.")
     db.ex("UPDATE tests SET status='ready', started_at=NULL, used_sec=?, answers=? WHERE id=?",
           (_used(t), json.dumps(answers, ensure_ascii=False), tid))
+    _keep_trace(tid, trace)
+    state.log_event("test_paused", t["task_id"], {"test_id": tid, "used_sec": _used(t),
+                                                  "answered": sum(bool(str(v).strip()) for v in answers.values())})
     bus.publish("test", {"id": tid, "status": "ready"})
     return public_view(tid)
 
@@ -551,13 +573,15 @@ async def expire_overdue() -> list[int]:
     return out
 
 
-async def submit(tid: int, answers: dict, auto: bool = False) -> dict:
+async def submit(tid: int, answers: dict, auto: bool = False, trace: dict | None = None) -> dict:
     t = db.decode(db.q1("SELECT * FROM tests WHERE id=?", (tid,)))
     if not t:
         raise state.Refused("No such test.")
     if t["status"] != "in_progress":
         raise state.Refused("Test not started or already submitted.")
     late = _used(t) > t["time_limit_min"] * 60 + 30
+    _keep_trace(tid, trace)
+    tr = trace_of(tid)
     results, pending = [], []
     for q in t["questions"]:
         given = str(answers.get(q["id"], ""))
@@ -565,6 +589,8 @@ async def submit(tid: int, answers: dict, auto: bool = False) -> dict:
         ok = any(_norm(given) == _norm(a) for a in acc if a)
         r = {"id": q["id"], "given": given, "correct": ok, "answer": q["answer"], "explanation": q.get("explanation", ""),
              "topic": q.get("topic", "")}
+        if q["id"] in tr:
+            r |= {k: tr[q["id"]].get(k, 0) for k in ("sec", "changes")}
         if not ok and q["type"] == "short" and given.strip() and has_api_key():
             pending.append((r, q))
         results.append(r)
@@ -592,7 +618,9 @@ async def submit(tid: int, answers: dict, auto: bool = False) -> dict:
                     r["stuck_id"] = state.add_stuck("wrong_answer", f"Practice set · {r['topic']}", t["task_id"],
                                                     f"Answer: {r['given'] or '(empty)'} · Correct: {r['answer']}", dedupe_min=0)
             db.ex("UPDATE tests SET results=? WHERE id=?", (json.dumps(results, ensure_ascii=False), tid))
-            state.log_event("practice_submitted", t["task_id"], {"test_id": tid, "score": score, "max": mx})
+        # every practice test is on the record, the coach's too: which questions went wrong and how long they took
+        state.log_event("practice_submitted", t["task_id"], {"test_id": tid, "score": score, "max": mx, "auto": auto,
+                                                             **_result_summary(results)})
         bus.publish("test", {"id": tid, "status": "submitted"})
         return public_view(tid)
     kind = t["kind"] if t["kind"] in ("c_quiz", "unit_quiz") else "eod_test"
@@ -608,7 +636,8 @@ async def submit(tid: int, answers: dict, auto: bool = False) -> dict:
             r["stuck_id"] = state.add_stuck("wrong_answer", f"Wrong answer · {r['topic']}", t["task_id"],
                                             f"Answer: {r['given'] or '(empty)'} · Correct: {r['answer']}", dedupe_min=0)
     db.ex("UPDATE tests SET results=? WHERE id=?", (json.dumps(results, ensure_ascii=False), tid))
-    state.log_event("test_submitted", t["task_id"], {"test_id": tid, "score": score, "max": mx, "late": late, "auto": auto},
+    state.log_event("test_submitted", t["task_id"], {"test_id": tid, "score": score, "max": mx, "late": late, "auto": auto,
+                                                     **_result_summary(results)},
                     d=datetime.fromisoformat(t["date"]).date())
     day = db.q1("SELECT status FROM days WHERE date=?", (t["date"],))
     if day and day["status"] == "closed":
@@ -620,6 +649,14 @@ async def submit(tid: int, answers: dict, auto: bool = False) -> dict:
             log.exception("PROGRESS.md update after a late test failed")
     bus.publish("test", {"id": tid, "status": "submitted"})
     return public_view(tid)
+
+
+def _result_summary(results: list[dict]) -> dict:
+    """What an event keeps of a graded test: the wrong and empty questions (number and topic) and the time used."""
+    wrong = [f"{r['id']} {r.get('topic', '')}".strip() for r in results if not r["correct"] and str(r.get("given", "")).strip()]
+    empty = [f"{r['id']} {r.get('topic', '')}".strip() for r in results if not str(r.get("given", "")).strip()]
+    secs = [r["sec"] for r in results if r.get("sec")]
+    return {"wrong": wrong, "empty": empty, **({"sec": sum(secs)} if secs else {})}
 
 
 def void_question(tid: int, qid: int | str, why: str = "") -> dict:

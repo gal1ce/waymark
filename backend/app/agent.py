@@ -42,13 +42,21 @@ TOOLS = [
     {"name": "update_future_day", "description": "Rewrite the tasks of a locked (future) day. Blocks/times are fixed. Describe what to change and how in 'instructions'; the planner applies it.",
      "input_schema": {"type": "object", "properties": {"date": {"type": "string"}, "instructions": {"type": "string"}},
                       "required": ["date", "instructions"], "additionalProperties": False}},
-    {"name": "create_practice_test", "description": "Create one timed practice test on the app's Tests page (not scored, not a sticking point source) and wait until its questions are written. Use whenever the user asks for a test or quiz; call it once per test when they ask for several. Returns whether it is ready, and its link.",
+    {"name": "create_practice_test", "description": "Create one timed practice test on the app's Tests page (not scored, not a sticking point source) and wait until its questions are written. Use whenever the user asks for a test or quiz; call it once per test when they ask for several. Also use it instead of sending the user to find exercises in a book or on another site: when they need problems to practise, the app writes and checks them. Returns whether it is ready, and its link.",
      "input_schema": {"type": "object", "properties": {"topics": {"type": "string", "description": "e.g. 'math (algebra foundations), C (variables)'; empty = what the user studied recently"},
                                                        "count": {"type": "integer", "description": "number of questions, 3-15; 0 = default (6, or the same as the follow-up's base test)"},
                                                        "difficulty": {"type": "string", "enum": ["auto", "easy", "medium", "hard", "harder", "easier"],
                                                                       "description": "auto = chosen from the user's recent practice results; harder/easier = relative to the follow_of test"},
                                                        "follow_of": {"type": "integer", "description": "id of an earlier test this one follows up on (its questions are not repeated, its mistakes get more weight); 0 = none"}},
                       "required": ["topics", "count", "difficulty", "follow_of"], "additionalProperties": False}},
+    {"name": "get_test", "description": "One test question by question: the question, the user's answer, the right answer, the explanation, "
+                                        "seconds spent and how often the answer was changed. Use it whenever the user talks about a test or a question "
+                                        "number (\"I couldn't do 4 and 5\"): you never need to ask them which ones they got wrong.",
+     "input_schema": {"type": "object", "properties": {"id": {"type": "integer", "description": "test id; 0 = the user's most recent test"}},
+                      "required": ["id"], "additionalProperties": False}},
+    {"name": "get_activity", "description": "What the user did, in order: tasks started, paused and finished, tests started, paused and submitted (with the wrong questions), files saved, compiles, commits, reading. For spotting patterns: when they work, what they skip, where time goes.",
+     "input_schema": {"type": "object", "properties": {"days": {"type": "integer", "description": "1 = today only, at most 14"}},
+                      "required": ["days"], "additionalProperties": False}},
     {"name": "remember", "description": "Save a memory note about the user (a fact or preference, in English, one sentence). Only when the user explicitly asks you to remember something. The user can see, edit and delete notes in the coach settings.",
      "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"], "additionalProperties": False}},
 ]
@@ -82,7 +90,8 @@ TOOL_LABEL = {
     "get_day": "Looking at your day", "get_history": "Reading your recent days", "read_file": "Reading a file",
     "list_files": "Browsing files", "add_stuck_point": "Logging a sticking point", "resolve_stuck_point": "Closing a sticking point",
     "add_day_note": "Adding a day note", "append_coach_log": "Writing to the coach log", "update_future_day": "Re-planning a future day",
-    "remember": "Saving a memory note", "create_practice_test": "Creating a practice test",
+    "remember": "Saving a memory note", "create_practice_test": "Creating a practice test", "get_test": "Reading your test",
+    "get_activity": "Reading what you did",
 }
 
 
@@ -98,6 +107,8 @@ def tool_label(name: str, args: dict | None = None) -> str:
         return f"Reading the last {a['days']} days"
     if name == "update_future_day" and a.get("date"):
         return f"Re-planning {a['date']}"
+    if name == "get_test" and a.get("id"):
+        return f"Reading test #{a['id']}"
     return TOOL_LABEL.get(name, name)
 
 
@@ -200,12 +211,109 @@ async def run_tool(name: str, args: dict) -> str:
         spec = practice.resolve(it, turn["convo"] if turn else None)
         tid = make_practice_test(spec)
         return f"Created practice test #{tid} (link #/test/{tid})."
+    if name == "get_test":
+        tid = int(args.get("id") or 0)
+        t = (db.q1("SELECT id FROM tests WHERE id=?", (tid,)) if tid else
+             db.q1("SELECT id FROM tests WHERE status!='failed' ORDER BY COALESCE(submitted_at, started_at, created_at) DESC LIMIT 1"))
+        return test_detail(t["id"]) if t else "No such test."
+    if name == "get_activity":
+        return activity(int(args.get("days") or 1))
     if name == "remember":
         from . import coach
         nid = coach.add_memory(args["text"])
         bus.publish("coach", {"memory": nid})
         return f"saved note #{nid}"
     return f"Unknown tool: {name}"
+
+
+def _test_title(t: dict) -> str:
+    kind = {"practice": "practice test", "eod": "end-of-day test", "c_quiz": "C quiz", "unit_quiz": "unit check"}.get(t["kind"], t["kind"])
+    topics = practice.spec_of(t["id"]).get("topics") if t["kind"] == "practice" else ""
+    return f"#{t['id']} {kind}" + (f" on {topics}" if topics else "") + f" ({t['date']})"
+
+
+def _q_text(q: dict, n: int = 220) -> str:
+    body = " ".join(x for x in (q.get("prompt", ""), f"${q['math']}$" if q.get("math") else "",
+                                (q.get("code") or "").replace("\n", " ")[:160]) if x)
+    return body[:n]
+
+
+def test_detail(tid: int) -> str:
+    """A test question by question, with the user's answers once it is submitted (for get_test)."""
+    from . import tests_eod
+    t = db.decode(db.q1("SELECT * FROM tests WHERE id=?", (tid,)))
+    if not t:
+        return "No such test."
+    head = _test_title(t) + f": {t['status']}"
+    if t["status"] == "submitted":
+        head += f", score {t['score']:g}/{t['max']:g}" + (" (cancelled)" if t.get("cancelled") else "")
+    trace = tests_eod.trace_of(tid)
+    res = {r["id"]: r for r in t["results"] or []}
+    lines = [head, f"Link: [Test #{tid}](#/test/{tid})"]
+    for n, q in enumerate(t["questions"] or [], 1):
+        r, tr = res.get(q["id"]), trace.get(q["id"]) or {}
+        line = f"Q{n} [{q.get('topic', '')}, {q['type']}] {_q_text(q, 400)}"
+        if q.get("choices"):
+            line += " | choices: " + " / ".join(q["choices"])
+        if r:
+            verdict = "VOID (taken out)" if r.get("void") else "correct" if r["correct"] else "WRONG" if str(r["given"]).strip() else "EMPTY"
+            line += f"\n   user: {r['given'] or '(empty)'} → {verdict}; right answer: {r['answer']}"
+            if r.get("explanation"):
+                line += f"; why: {r['explanation'][:300]}"
+        elif t["status"] == "in_progress":
+            line += "\n   (test running: answers hidden)"
+        if tr.get("sec"):
+            line += f"\n   {tr['sec']} s on it" + (f", answer changed {tr['changes']}x" if tr.get("changes") else "")
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def activity(days: int) -> str:
+    """The event log of the last days, one line each, for get_activity."""
+    days = max(1, min(days, 14))
+    rows = db.q("SELECT e.ts, e.type, e.data, t.title FROM events e LEFT JOIN tasks t ON t.id = e.task_id "
+                "WHERE e.date>=? ORDER BY e.id", ((today() - timedelta(days=days - 1)).isoformat(),))
+    if not rows:
+        return "Nothing recorded in that time."
+    out = []
+    for r in rows[-400:]:
+        d = json.loads(r["data"] or "{}")
+        d.pop("stdout", None), d.pop("stderr", None)
+        extra = json.dumps(d, ensure_ascii=False)[:200] if d else ""
+        out.append(f"{r['ts'][:16].replace('T', ' ')} {r['type']}" + (f" · {r['title']}" if r["title"] else "") + (f" {extra}" if extra else ""))
+    return "\n".join(out)[-MAX_READ:]
+
+
+def _recent_tests_block() -> str:
+    """The last few tests with what went wrong in each, so "I couldn't do 4 and 5" needs no question back."""
+    cut = (today() - timedelta(days=3)).isoformat()
+    rows = db.q("SELECT * FROM tests WHERE status IN ('submitted','in_progress','ready') AND date>=? AND cancelled=0 "
+                "ORDER BY id DESC LIMIT 5", (cut,))
+    if not rows:
+        return ""
+    from . import tests_eod
+    out = ["Recent tests (newest first; question numbers are the ones the user sees):"]
+    for t in map(db.decode, rows):
+        if t["status"] != "submitted":
+            st = "in progress" if t["status"] == "in_progress" else "paused" if t.get("used_sec") else "not started"
+            out.append(f"- {_test_title(t)}: {st}, {len(t['questions'] or [])} questions (#/test/{t['id']})")
+            continue
+        trace = tests_eod.trace_of(t["id"])
+        res = {r["id"]: r for r in t["results"] or []}
+        out.append(f"- {_test_title(t)}: {t['score']:g}/{t['max']:g} (#/test/{t['id']})")
+        for n, q in enumerate(t["questions"] or [], 1):
+            r = res.get(q["id"])
+            if not r or r.get("void"):
+                continue
+            sec = (trace.get(q["id"]) or {}).get("sec")
+            tm = f", {sec} s" if sec else ""
+            if r["correct"]:
+                out.append(f"  Q{n} [{q.get('topic', '')}] correct{tm}")
+            else:
+                out.append(f"  Q{n} [{q.get('topic', '')}] {'WRONG' if str(r['given']).strip() else 'EMPTY'}{tm}: {_q_text(q, 160)}"
+                           f" | user: {r['given'] or '-'} | right: {r['answer']}")
+    out.append("For a whole question with its explanation, call get_test.")
+    return "\n".join(out)
 
 
 _bg: set[asyncio.Task] = set()
@@ -433,13 +541,11 @@ def _today_block() -> str:
         lines.append("Open sticking points (each in its own subject; not about the block scheduled now unless it says so): " + "; ".join(
             f"#{s['id']} {s['summary']}" + (f" ({s['block']}, task #{s['task_id']}, {s['date']})" if s["block"]
                                              else f" (task #{s['task_id']})" if s["task_id"] else "") for s in stuck))
-    tests = db.q("SELECT id,kind,status,score,max FROM tests WHERE date=? ORDER BY id", (ds,))
-    if tests:
-        lines.append("Tests today: " + "; ".join(
-            f"#{t['id']} {t['kind']} {t['status']}" + (f" {t['score']}/{t['max']}" if t["status"] == "submitted" else "")
-            + f" (#/test/{t['id']})" for t in tests))
-    else:
-        lines.append("Tests today: none yet; the end-of-day test is prepared in the evening block.")
+    recent = _recent_tests_block()
+    if recent:
+        lines.append(recent)
+    if not db.q1("SELECT 1 FROM tests WHERE date=? AND kind='eod'", (ds,)):
+        lines.append("End-of-day test: not yet; it is prepared in the evening block.")
     prev = db.q1("SELECT date FROM days WHERE date<? ORDER BY date DESC LIMIT 1", (ds,))
     if prev:
         h = _history_day(prev["date"])

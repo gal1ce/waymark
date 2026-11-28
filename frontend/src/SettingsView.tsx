@@ -448,9 +448,13 @@ function HealthSection({ ctx }: { ctx: Ctx }) {
           <Row label={t('Repo watcher')} tone={watcherOk ? undefined : 'warn'} hint={!watcherOk ? x.watcher.detail : undefined}><span className="sr-v">{tx(WATCH_LABEL[x.watcher.state] ?? x.watcher.state)}</span></Row>
         )}
         <Row label={t('Code sandbox')}><span className="sr-v">{x.sandbox ? t('bubblewrap (test code runs isolated)') : t('not available: test code runs with limits only')}</span></Row>
-        <Row label={t('Curriculum left')}>
-          <span className="sr-v">{r.tracks ? r.tracks.map((y) => `${y.label} ${t('{a}/{b} units', { a: y.left, b: y.units })}`).join(' · ')
-            : <>C {t('{n} study days', { n: r.c_days ?? `${r.horizon}+` })} · Kintsugi {r.kintsugi_days ?? `${r.horizon}+`} · Khan {t('{n} units', { n: r.khan_units_left })}</>}</span>
+        {/* one line per course: joined into one string, a long plan ran off the side of the row */}
+        <Row label={t('Curriculum left')} stack={!!r.tracks}>
+          {r.tracks ? (
+            <ul className="sr-list">
+              {r.tracks.map((y) => <li key={y.label}><span className="sr-list-l">{y.label}</span><span className="sr-list-v">{t('{a}/{b} units', { a: y.left, b: y.units })}</span></li>)}
+            </ul>
+          ) : <span className="sr-v">C {t('{n} study days', { n: r.c_days ?? `${r.horizon}+` })} · Kintsugi {r.kintsugi_days ?? `${r.horizon}+`} · Khan {t('{n} units', { n: r.khan_units_left })}</span>}
         </Row>
         {missing.map(([k, p]) => <Row key={k} tone="warn" label={tx(k)} hint={t('missing')}><PathField path={p.path} /></Row>)}
       </Group>

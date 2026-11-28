@@ -8,7 +8,7 @@ import re
 import secrets
 import subprocess
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -229,13 +229,16 @@ async def task_compile(tid: int):
     return {"results": await monitor.compile_task(tid)}
 
 
+PRACTICE_KINDS = ("practice", "review")   # tasks whose problems the app can write and check itself
+
+
 @app.post("/api/tasks/{tid}/practice")
 async def task_practice(tid: int):
     """A problem task's practice set: original problems of the kind the task asks for, on the Tests page. One open set per
     task: asking again while one is unfinished returns it."""
     task = db.decode(state.get_task(tid))
-    if task["kind"] != "practice":
-        raise state.Refused("Practice sets belong to problem tasks.")
+    if task["kind"] not in PRACTICE_KINDS:
+        raise state.Refused("Practice sets belong to problem and review tasks.")
     if task["date"] > today().isoformat():
         raise state.Refused("That day hasn't started yet.")
     open_ = db.q1("SELECT id FROM tests WHERE kind='practice' AND task_id=? AND cancelled=0 "
@@ -247,6 +250,13 @@ async def task_practice(tid: int):
     units = (tr or {}).get("units") or []
     unit = units[meta["unit"]] if isinstance(meta.get("unit"), int) and meta["unit"] < len(units) else None
     topic = unit["title"] if unit else re.sub(r"\s*·\s*problems.*$", "", task["title"]).strip() or task["title"]
+    if task["kind"] == "review":
+        # a review task is about a sticking point: its open ones say what went wrong, so the set aims there
+        stuck = db.q("SELECT summary, detail FROM stuck WHERE resolved=0 AND (task_id=? OR date>=?) ORDER BY id DESC LIMIT 6",
+                     (tid, (today() - timedelta(days=7)).isoformat()))
+        if stuck:
+            task["detail"] = (task.get("detail") or "") + "\n\nOpen sticking points: " + "; ".join(
+                s["summary"] + (f" ({s['detail']})" if s["detail"] else "") for s in stuck)
     ask = (task.get("detail") or "").split("\n\nWrite full solutions")[0].strip()
     text = "\n".join(x for x in (f"Task: {task['title']}", f"Course: {tr['label']}" if tr else "",
                                  f"Unit objective: {unit.get('objective', '')}" if unit else "", f"It asks for: {ask}" if ask else "") if x)
@@ -604,22 +614,24 @@ def test_start(tid: int):
 
 class Answers(BaseModel):
     answers: dict[str, str]
+    # how each question went, as the page saw it: {qid: {sec, visits, changes}}
+    trace: dict[str, dict[str, int]] | None = None
 
 
 @app.put("/api/tests/{tid}/answers")
 def test_answers(tid: int, body: Answers):
-    tests_eod.save_answers(tid, body.answers)
+    tests_eod.save_answers(tid, body.answers, body.trace)
     return {"ok": True}
 
 
 @app.post("/api/tests/{tid}/exit")
 def test_exit(tid: int, body: Answers):
-    return tests_eod.leave(tid, body.answers)
+    return tests_eod.leave(tid, body.answers, body.trace)
 
 
 @app.post("/api/tests/{tid}/submit")
 async def test_submit(tid: int, body: Answers):
-    return await tests_eod.submit(tid, body.answers)
+    return await tests_eod.submit(tid, body.answers, trace=body.trace)
 
 
 class VoidIn(BaseModel):
