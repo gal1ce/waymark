@@ -283,10 +283,10 @@ def _block_tasks(tr: dict, minutes: int, pos: dict) -> list[dict]:
                 (unit.get("objective") or "").strip() + "\n\nWork through the sources below with pen and paper: "
                 "redo every worked example yourself before reading its solution.", _resources(unit), meta=meta),
               T(f"{unit['title']} · problems{part}", "practice", practice,
-                (unit.get("practice") or "Problems from the unit's sources, easiest first.").strip() +
-                "\n\nWrite full solutions. Where you get stuck for more than a few minutes, note exactly where and "
-                "move on; the coach helps after 30 minutes. No copy of the source? Press **Practice set**: the app writes "
-                "problems of the same kind, checks your answers and keeps the ones you miss as sticking points.",
+                (unit.get("practice") or "Problems on the unit, easiest first.").strip() +
+                "\n\nPress **Practice set**: the app writes problems of this kind, checks your answers and keeps the "
+                "ones you miss as sticking points. Work each one on paper, step by step. Where you get stuck for more "
+                "than a few minutes, note exactly where and move on; the coach helps after 30 minutes.",
                 _resources(unit), meta=meta)]
     if last:
         tasks.append(_quiz_task(tr, pos["unit"]))

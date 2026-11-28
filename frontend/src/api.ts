@@ -63,7 +63,9 @@ export type GenLive = {
   phase: 'preparing' | 'writing' | 'checking' | 'ready' | 'failed'; model: string | null; chars: number; elapsed?: number
   log: { t: number; text: string; kind: 'step' | 'q' | 'warn' | 'err' | 'done' }[]
 }
-export type TestResult = { id: string; given: string; correct: boolean; answer: string; explanation: string; topic: string; note?: string; void?: boolean; void_why?: string }
+export type TestResult = { id: string; given: string; correct: boolean; answer: string; explanation: string; topic: string; note?: string; void?: boolean; void_why?: string; sec?: number; changes?: number }
+/** How each question went, as the test page saw it: seconds on it, times opened, times a given answer was changed */
+export type QTrace = Record<string, { sec: number; visits: number; changes: number }>
 export type Test = {
   id: number; date: string; kind: 'eod' | 'c_quiz' | 'unit_quiz' | 'practice'; status: string; source: string; questions: Question[]
   live?: GenLive
@@ -71,6 +73,7 @@ export type Test = {
   used_sec?: number
   practice?: { topics: string; count: number; asked: number | null; level: 'easy' | 'medium' | 'hard' | null; level_why: string | null; follow_of: number | null; from_task?: boolean }
   answers: Record<string, string>; results: TestResult[]; score: number | null; max: number | null
+  trace?: QTrace
   time_limit_min: number; remaining_sec?: number; threshold: string; error?: string | null; started_at?: string | null
 }
 /** One thing the coach did while answering; `at` is where in the reply's text it happened. */
@@ -390,10 +393,10 @@ export const api = {
   tests: () => req<{ id: number; date: string; kind: string; status: string; cancelled?: number; used_sec?: number; score: number | null; max: number | null }[]>('GET', '/tests'),
   test: (id: number) => req<Test>('GET', `/tests/${id}`),
   startTest: (id: number) => req<Test>('POST', `/tests/${id}/start`),
-  saveAnswers: (id: number, answers: Record<string, string>) => req('PUT', `/tests/${id}/answers`, { answers }),
-  submit: (id: number, answers: Record<string, string>) => req<Test>('POST', `/tests/${id}/submit`, { answers }),
+  saveAnswers: (id: number, answers: Record<string, string>, trace?: QTrace) => req('PUT', `/tests/${id}/answers`, { answers, trace }),
+  submit: (id: number, answers: Record<string, string>, trace?: QTrace) => req<Test>('POST', `/tests/${id}/submit`, { answers, trace }),
   voidQuestion: (id: number, qid: string, why: string) => req<Test>('POST', `/tests/${id}/questions/${qid}/void`, { why }),
-  exitTest: (id: number, answers: Record<string, string>) => req<Test>('POST', `/tests/${id}/exit`, { answers }),
+  exitTest: (id: number, answers: Record<string, string>, trace?: QTrace) => req<Test>('POST', `/tests/${id}/exit`, { answers, trace }),
   kintsugi: (path: string) => req<{ path: string; content: string }>('GET', `/kintsugi/file?path=${encodeURIComponent(path)}`),
   open: (path: string) => req<{ opened: string; exists: boolean }>('POST', '/open', { path }),
   beejPage: (page: string) => req<BeejChapter>('GET', `/beej/page/${encodeURIComponent(page)}`),

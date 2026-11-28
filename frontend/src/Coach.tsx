@@ -5,7 +5,7 @@ import rehypeKatex from 'rehype-katex'
 import remarkMath from 'remark-math'
 import {
   ArrowUp, Brain, CalendarClock, CalendarDays, Check, ChevronRight, CircleAlert, ClipboardList, Copy, FileText, Flag, FolderOpen, Globe, History,
-  ImageUp, Lock, NotebookPen, PanelRightOpen, PenLine, Pencil, Plus, RotateCcw, Settings2, ShieldCheck, Square, StickyNote, Trash2, Wrench, X,
+  ImageUp, Lock, NotebookPen, PanelRightOpen, PenLine, PictureInPicture2, Pencil, Plus, RotateCcw, Settings2, ShieldCheck, Square, StickyNote, Trash2, Wrench, X,
   type LucideIcon,
 } from 'lucide-react'
 import { api, ApiError, fmtDate, streamChat, type ChatBody, type ChatMsg, type ChatResult, type ChatStep, type CoachSettings, type Convo, type Effort, type ReplyLanguage, type GenLive, type StreamEv, type Task } from './api'
@@ -350,6 +350,56 @@ function RuleLine({ current, locked, short, ctx }: { current: Task | null; locke
   )
 }
 
+/** The coach's mode as a chip in the composer's toolbar (the long rule is its tooltip), with "Explain now" beside it
+    while explanations are still closed. Takes the place of the rule line under the box. */
+function ModeChip({ current, locked, ctx }: { current: Task | null; locked: boolean; ctx: Ctx }) {
+  const [asking, setAsking] = useState(false)
+  const mins = current ? Math.floor(current.spent_sec_live / 60) : 0
+  const early = current?.meta?.explain_early != null
+  const hintLeft = current && current.learning && !early ? Math.max(0, 30 - mins) : 0
+  const why = tr('While a learning task runs, the coach spends its first 30 minutes on guiding questions and points you to the right part of the source, so you try it yourself first; then it also explains the concept. "Explain now" opens explanations early. With no task running it explains directly. It never writes the solution to your own exercise or the code for you.')
+  const label = locked ? tr('Closed book')
+    : !current ? tr('Explains')
+    : hintLeft ? tr('Guiding · {n} min', { n: hintLeft })
+    : tr('Explains · task on')
+  const explainNow = () => {
+    if (!current) return
+    setAsking(true)
+    ctx.run(api.explainNow(current.id)).then((r) => { if (r) { ctx.notify(tr('Explanations are open for this task')); ctx.refresh() } }).finally(() => setAsking(false))
+  }
+  return <>
+    <span className="cbar-chip" title={why} tabIndex={0}><ShieldCheck size={14} strokeWidth={1.6} /><span>{label}</span></span>
+    {hintLeft > 0 && !locked && <button type="button" className="cbar-chip act" disabled={asking} onClick={explainNow}
+      title={tr('Open concept explanations now instead of in {n} min. Trying first helps you remember, so use it when you are really stuck.', { n: hintLeft })}>{tr('Explain now')}</button>}
+  </>
+}
+
+/** The model the coach answers with and how hard it thinks, like a chat app's picker; effort changes right here. */
+function ModelEffort({ ctx }: { ctx: Ctx }) {
+  const [s, setS] = useState<CoachSettings | null>(null)
+  useEffect(() => { api.coach().then(setS).catch(() => {}) }, [ctx.version])
+  if (!s) return null
+  const model = (s.model_active || '').replace(/^(anthropic|openai|google|meta-llama)\//, '').replace(/^claude-/, '').replace(/-\d{8}$/, '')
+  const pick = (effort: Effort) => {
+    const next = { ...s, effort }
+    setS(next)
+    ctx.run(api.saveCoach({ name: s.name, personality: s.personality, verbosity: s.verbosity, effort, model: s.model, language: s.language }))
+      .then((r) => { if (r) setS(r) })
+  }
+  return (
+    <span className="cbar-model" title={tr('Coach model and thinking effort (Coach settings has the rest)')}>
+      {model && <span className="cbar-name">{model}</span>}
+      <label className="cbar-eff">
+        <span className="sr-only">{tr('Thinking effort')}</span>
+        <select value={s.effort} onChange={(e) => pick(e.target.value as Effort)}>
+          {/* the name only ("Fast"); what it means is the option's tooltip and in Coach settings */}
+          {(Object.keys(s.effort_labels) as Effort[]).map((k) => <option key={k} value={k} title={tx(s.effort_labels[k])}>{tx(s.effort_labels[k].split(':')[0])}</option>)}
+        </select>
+      </label>
+    </span>
+  )
+}
+
 // ------------------------------------------------------------------ small pieces
 function Confirm({ onYes, label, icon }: { onYes: () => void; label: string; icon?: React.ReactNode }) {
   const [ask, setAsk] = useState(false)
@@ -659,8 +709,90 @@ function examples(name: string, current: Task | null): string[] {
   return out
 }
 
-export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false, onPreview, openId }: {
+type PanelProps = {
   ctx: Ctx; current: Task | null; hasKey: boolean; locked: boolean; onClose: () => void
+  /** the side panel's own window over the page, and the switch between the two */
+  floating?: boolean; onFloat?: () => void; onHeadDown?: (e: React.PointerEvent) => void
+  /** docked: the head was dragged off the side; the pointer is still down at (x, y), (dx, dy) into the window */
+  onTearOff?: (g: Grab) => void
+}
+
+/** A drag that goes on in another element: where the pointer is and where it holds the window */
+export type Grab = { x: number; y: number; dx: number; dy: number }
+
+const FLOAT_SIZE = 'ctu.coach.float.size'
+const FLOAT_POS = 'ctu.coach.float.pos'
+const SNAP = 24   // px from the window's side where letting go docks the coach there
+
+/** The coach in a window of its own over the page: everything the side panel does (conversations, settings, the
+    chat), moved by its head and sized from its corner, both remembered. It stays open over full-screen tests too. */
+export function CoachWindow({ grab, onDock, ...props }: Omit<PanelProps, 'floating' | 'onHeadDown' | 'onTearOff'> & {
+  /** a drag already going on: the window was just torn off the docked panel and follows the pointer */
+  grab?: Grab | null
+  /** let go at a side of the window: dock there */
+  onDock: (side: 'left' | 'right') => void
+}) {
+  const box = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(() => {
+    if (grab) return { x: grab.x - grab.dx, y: grab.y - grab.dy }
+    try { return JSON.parse(localStorage.getItem(FLOAT_POS) ?? 'null') } catch { return null }
+  })
+  const [snap, setSnap] = useState<'left' | 'right' | null>(null)
+  const [size] = useState<{ w: number; h: number }>(() => {
+    try { return JSON.parse(localStorage.getItem(FLOAT_SIZE) ?? '') } catch { return { w: 420, h: 600 } }
+  })
+  const [, redraw] = useState(0)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      try { localStorage.setItem(FLOAT_SIZE, JSON.stringify({ w: el.offsetWidth, h: el.offsetHeight })) } catch { /* only a preference */ }
+    })
+    ro.observe(el)
+    const onWin = () => redraw((n) => n + 1)   // a smaller window keeps the head on screen
+    window.addEventListener('resize', onWin)
+    return () => { ro.disconnect(); window.removeEventListener('resize', onWin) }
+  }, [])
+  const dockRef = useRef(onDock)
+  useEffect(() => { dockRef.current = onDock }, [onDock])
+  // the window follows the pointer until it is let go; at a side of the screen it shows where it would dock
+  const follow = useCallback((dx: number, dy: number) => {
+    let last: { x: number; y: number } | null = null
+    let edge: 'left' | 'right' | null = null
+    const move = (ev: PointerEvent) => {
+      last = { x: ev.clientX - dx, y: Math.max(8, Math.min(window.innerHeight - 56, ev.clientY - dy)) }
+      edge = ev.clientX <= SNAP ? 'left' : ev.clientX >= window.innerWidth - SNAP ? 'right' : null
+      setPos(last)
+      setSnap(edge)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up)
+      setSnap(null)
+      if (edge) { dockRef.current(edge); return }
+      if (last) try { localStorage.setItem(FLOAT_POS, JSON.stringify(last)) } catch { /* only a preference */ }
+    }
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up)
+  }, [])
+  const grabbed = useRef(false)
+  useEffect(() => { if (grab && !grabbed.current) { grabbed.current = true; follow(grab.dx, grab.dy) } }, [grab, follow])
+  const start = (e: React.PointerEvent) => {
+    if (!box.current || e.button !== 0 || (e.target as HTMLElement).closest('button, a, input, textarea, select')) return
+    e.preventDefault()
+    const r = box.current.getBoundingClientRect()
+    follow(e.clientX - r.left, e.clientY - r.top)
+  }
+  const place: React.CSSProperties = pos
+    ? { left: Math.max(8 - size.w + 160, Math.min(pos.x, window.innerWidth - 160)), top: Math.max(8, Math.min(pos.y, window.innerHeight - 56)) }
+    : { right: 24, bottom: 24 }
+  return <>
+    {snap && <div className={'coach-dock-hint ' + snap} aria-hidden="true" />}
+    <div ref={box} className={'coach-float' + (snap ? ' snapping' : '')} style={{ width: size.w, height: size.h, ...place }}>
+      <CoachPanel {...props} floating onHeadDown={start} />
+    </div>
+  </>
+}
+
+export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false, onPreview, openId, floating, onFloat, onHeadDown, onTearOff }: PanelProps & {
   /** the Nix page: conversations on the left, the chat in the middle, what the coach made opens on the right */
   page?: boolean; onPreview?: (href: string) => void; openId?: number
 }) {
@@ -748,6 +880,22 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
   }
   const del = async (m: ChatMsg) => { if (await ctx.run(api.delMsg(m.id)) !== undefined) { reload(); if (cid) api.convo(cid).then((c) => setMsgs(c.messages)).catch(() => {}) } }
 
+  // docked: pulling the head more than a few pixels lifts the panel off the side into a floating window
+  const tearOff = (e: React.PointerEvent) => {
+    if (!onTearOff || e.button !== 0 || (e.target as HTMLElement).closest('button, a, input, textarea, select')) return
+    const head = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const x0 = e.clientX, y0 = e.clientY
+    const move = (ev: PointerEvent) => {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return
+      done()
+      let w = 420
+      try { w = JSON.parse(localStorage.getItem(FLOAT_SIZE) ?? '').w || w } catch { /* default size */ }
+      onTearOff({ x: ev.clientX, y: ev.clientY, dx: Math.min(x0 - head.left, w - 120), dy: y0 - head.top })
+    }
+    const done = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', done) }
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', done)
+  }
+
   const off = !hasKey || locked
   const conv = list.find((c) => c.id === cid)
   // once the stored copy of the message has loaded, stop showing the local one
@@ -791,6 +939,7 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
   }
   const composer = (
     <form className={'composer' + (page ? ' big' : '')} onSubmit={(e) => { e.preventDefault(); if (busy) stop(); else send() }}>
+      <div className="cbox" onClick={(e) => { if (e.target === e.currentTarget) e.currentTarget.querySelector('textarea')?.focus() }}>
       {page && empty && !text && !off && <TypeHint lines={hints} on={!reduce} take={hintNow} />}
       <textarea rows={page ? 2 : 1} value={text} autoFocus={page} aria-label={tr('Ask {name}', { name })}
         placeholder={!hasKey ? tr('Agent is off') : locked ? tr('Test in progress') : page && empty ? '' : tr('Ask {name} anything…', { name })} disabled={off}
@@ -803,9 +952,15 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
             if (take) { e.preventDefault(); fillBox(take) }
           }
         }} />
-      {busy
-        ? <button className="btn send" type="submit" aria-label={tr('Stop')} title={tr('Stop')}><Square size={14} strokeWidth={2} /></button>
-        : <button className="btn primary send" type="submit" disabled={off || !text.trim()} aria-label={tr('Send')}><ArrowUp size={16} strokeWidth={1.75} /></button>}
+      <div className="cbar">
+        <ModeChip current={current} locked={locked} ctx={ctx} />
+        <span className="cbar-gap" />
+        {hasKey && <ModelEffort ctx={ctx} />}
+        {busy
+          ? <button className="send stop" type="submit" aria-label={tr('Stop')} title={tr('Stop')}><Square size={12} strokeWidth={2.4} fill="currentColor" /></button>
+          : <button className={'send' + (text.trim() && !off ? ' on' : '')} type="submit" disabled={off || !text.trim()} aria-label={tr('Send')} title={tr('Send  Enter')}><ArrowUp size={16} strokeWidth={2} /></button>}
+      </div>
+      </div>
     </form>
   )
   const thread = <>
@@ -866,7 +1021,7 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
                 </div>
               ) : <>
                 <div className="msgs nix-scroll" ref={scroller}><div className="nix-col">{thread}</div></div>
-                <div className="nix-col nix-foot">{follow}{composer}<RuleLine current={current} locked={locked} short ctx={ctx} /></div>
+                <div className="nix-col nix-foot">{follow}{composer}</div>
               </>}
             <Scrollbar key={view + String(cid)} target={scroller} />
           </section>
@@ -876,8 +1031,9 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
   }
 
   return (
-    <aside className="coach" aria-label={tr('Coach')}>
-      <div className="coach-head">
+    <aside className={'coach' + (floating ? ' floating' : '')} aria-label={tr('Coach')}>
+      <div className="coach-head" onPointerDown={floating ? onHeadDown : (e) => tearOff(e)}
+        title={floating ? tr('Drag to move · resize from the corner') : onTearOff ? tr('Drag out to float') : undefined}>
         <CoachAvatar ctx={ctx} busy={busy} />
         <span className="coach-id">
           <span className="coach-name">{name}</span>
@@ -888,6 +1044,9 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
         <button className={'icon-btn' + (view === 'list' ? ' on' : '')} onClick={() => setView((v) => (v === 'list' ? 'chat' : 'list'))} aria-label={tr('Conversations')} title={tr('Conversations')}><History size={16} strokeWidth={1.5} /></button>
         <button className="icon-btn" onClick={() => open(null)} aria-label={tr('New chat')} title={tr('New chat')} disabled={busy}><Plus size={16} strokeWidth={1.5} /></button>
         <button className={'icon-btn' + (view === 'settings' ? ' on' : '')} onClick={() => setView((v) => (v === 'settings' ? 'chat' : 'settings'))} aria-label={tr('Coach settings')} title={tr('Coach settings')}><Settings2 size={16} strokeWidth={1.5} /></button>
+        {onFloat && (floating
+          ? <button className="icon-btn" onClick={onFloat} aria-label={tr('Dock to the side')} title={tr('Dock to the side')}><PanelRightOpen size={16} strokeWidth={1.5} /></button>
+          : <button className="icon-btn" onClick={onFloat} aria-label={tr('Pop out into a floating window')} title={tr('Pop out into a floating window')}><PictureInPicture2 size={16} strokeWidth={1.5} /></button>)}
         <button className="icon-btn" onClick={onClose} aria-label={tr('Close coach panel')} title={tr('Close  ]')}><X size={16} strokeWidth={1.5} /></button>
       </div>
 
@@ -916,7 +1075,6 @@ export function CoachPanel({ ctx, current, hasKey, locked, onClose, page = false
         </div>
         {follow}
         {composer}
-        <RuleLine current={current} locked={locked} short ctx={ctx} />
       </>}
       <Scrollbar key={view + String(cid)} target={scroller} />
     </aside>

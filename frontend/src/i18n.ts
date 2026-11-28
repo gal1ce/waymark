@@ -750,6 +750,13 @@ const TR = {
   "Prepare quiz": "Quiz hazırla",
   "Prepare test": "Testi hazırla",
   'Practice set': 'Alıştırma seti',
+  // composer toolbar, floating coach
+  'Explains': 'Açıklıyor', 'Guiding · {n} min': 'Yönlendiriyor · {n} dk', 'Explains · task on': 'Açıklıyor · görev sürüyor',
+  'Coach model and thinking effort (Coach settings has the rest)': 'Koçun modeli ve düşünme düzeyi (gerisi Koç ayarlarında)',
+  'Send  Enter': 'Gönder  Enter',
+  'Dock to the side': 'Kenara yerleştir', 'Pop out into a floating window': 'Yüzen pencereye al',
+  'Drag to move · resize from the corner': 'Taşımak için sürükle · köşesinden boyutlandır',
+  'Drag out to float': 'Yüzdürmek için dışarı sürükle',
   'Your notes on {t}:': '{t} hakkındaki notların:', 'Start a page on it': 'Bununla ilgili sayfa aç', 'Your notes: {t}': 'Notların: {t}',
   'Name the unit or topic this page is about: the day page and Progress then link to it': 'Bu sayfanın hangi ünite ya da konuyla ilgili olduğunu yaz: gün sayfası ve İlerleme ona bağlantı verir',
   'Topic': 'Konu', 'e.g. a unit of your plan': 'örn. planındaki bir ünite',

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CalcTool } from './Calc'
 import { Ban, Check, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, Flag, RefreshCw, Send, Timer, X } from 'lucide-react'
-import { api, fmtDate, fmtDur, fmtMin, type Test } from './api'
+import { api, fmtDate, fmtDur, fmtMin, type QTrace, type Test } from './api'
 import type { Ctx } from './App'
 import { Empty, PageHead } from './ui'
 import { busyProps, useBusy, useQuestionFocus } from './interact'
@@ -51,6 +51,33 @@ const byTopic = (qs: { id: string; topic: string }[], results: Record<string, { 
   return [...m].map(([k, [ok, all]]) => [k, ok, all] as const).sort((a, b) => a[1] / a[2] - b[1] / b[2])
 }
 
+/** How each question goes while the test runs: seconds on it (only while the tab is in view), visits, and answers
+    changed. It goes to the server with the answers, so the coach can see where time went and what was second-guessed. */
+function useTrace(t: Test | null, cur: number, all: boolean, ans: Record<string, string>) {
+  const trace = useRef<QTrace>({})
+  const seeded = useRef(false)
+  // a resumed test carries on from what the server kept
+  useEffect(() => { if (t && !seeded.current) { trace.current = { ...(t.trace ?? {}), ...trace.current }; seeded.current = true } }, [t])
+  const ansRef = useRef(ans)
+  useEffect(() => { ansRef.current = ans }, [ans])
+  const running = t?.status === 'in_progress' && !all
+  const qid = running && t ? t.questions[Math.min(cur, t.questions.length - 1)]?.id : undefined
+  const mcq = running && t ? t.questions.find((q) => q.id === qid)?.type === 'mcq' : false
+  useEffect(() => {
+    if (!qid) return
+    const at = () => (trace.current[qid] ??= { sec: 0, visits: 0, changes: 0 })
+    at().visits += 1
+    const before = ansRef.current[qid] ?? ''
+    const tick = setInterval(() => { if (document.visibilityState === 'visible') at().sec += 1 }, 1000)
+    return () => {
+      clearInterval(tick)
+      const after = ansRef.current[qid] ?? ''
+      if (!mcq && before.trim() && after.trim() !== before.trim()) at().changes += 1
+    }
+  }, [qid, mcq])
+  return trace
+}
+
 export default function TestPage({ id, ctx, version }: { id: number; ctx: Ctx; version: number }) {
   const [t, setT] = useState<Test | null>(null)
   const [ans, setAns] = useState<Record<string, string>>({})
@@ -74,6 +101,7 @@ export default function TestPage({ id, ctx, version }: { id: number; ctx: Ctx; v
   }, [id, version])
 
   const exam = t?.status === 'in_progress'
+  const trace = useTrace(t, cur, all, ans)
   useEffect(() => { ctx.setExam(exam); return () => ctx.setExam(false) }, [exam]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -84,16 +112,16 @@ export default function TestPage({ id, ctx, version }: { id: number; ctx: Ctx; v
 
   useEffect(() => {
     if (t?.status !== 'in_progress') return
-    const h = setTimeout(() => api.saveAnswers(id, ans).catch(() => {}), 600)
+    const h = setTimeout(() => api.saveAnswers(id, ans, trace.current).catch(() => {}), 600)
     return () => clearTimeout(h)
-  }, [ans, id, t?.status])
+  }, [ans, id, t?.status, trace])
 
   // time's up: hand in what is there (the server does the same if the tab is closed)
   const autoSent = useRef(false)
   useEffect(() => {
     if (t?.status !== 'in_progress' || left !== 0 || autoSent.current) return
     autoSent.current = true
-    api.submit(id, ans).then((x) => { setT(x); ctx.notify(tr("Time's up: the test was submitted with your answers"), 'warn'); ctx.refresh() })
+    api.submit(id, ans, trace.current).then((x) => { setT(x); ctx.notify(tr("Time's up: the test was submitted with your answers"), 'warn'); ctx.refresh() })
       .catch((e) => ctx.notify(e instanceof Error ? e.message : String(e), 'err'))
   }, [left, t?.status, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -116,7 +144,12 @@ export default function TestPage({ id, ctx, version }: { id: number; ctx: Ctx; v
   useQuestionFocus(root, Math.min(cur, Math.max(n - 1, 0)), t?.status === 'in_progress' && !all)
 
   if (!t) return <div className="page" />
-  const set = (q: string, v: string) => setAns((a) => ({ ...a, [q]: v }))
+  const set = (q: string, v: string) => setAns((a) => {
+    // a choice switched to another counts as a changed answer (typed answers count when you come back and change them)
+    const mcq = t.questions.find((x) => x.id === q)?.type === 'mcq'
+    if (mcq && a[q] && a[q] !== v) (trace.current[q] ??= { sec: 0, visits: 1, changes: 0 }).changes += 1
+    return { ...a, [q]: v }
+  })
   const results = Object.fromEntries((t.results ?? []).map((r) => [r.id, r]))
   const submitted = t.status === 'submitted'
   const markBroken = (qid: string) => run(async () => {
@@ -125,7 +158,7 @@ export default function TestPage({ id, ctx, version }: { id: number; ctx: Ctx; v
   })
   // leaving pauses the test: answers and the time used stay, nothing is graded
   const exitTest = () => run(async () => {
-    const x = await ctx.run(api.exitTest(t.id, ans))
+    const x = await ctx.run(api.exitTest(t.id, ans, trace.current))
     if (x) { setT(x); setConfirm(false); setLeft(x.remaining_sec ?? null); ctx.notify(tr('Test paused. Your answers and the time left are kept')); ctx.refresh() }
   })
   const paused = t.status === 'ready' && (t.used_sec ?? 0) > 0
@@ -143,7 +176,7 @@ export default function TestPage({ id, ctx, version }: { id: number; ctx: Ctx; v
       if (done < n && !confirm) { setConfirm(true); return }
       setConfirm(false)
       await run(async () => {
-        const x = await ctx.run(api.submit(t.id, ans))
+        const x = await ctx.run(api.submit(t.id, ans, trace.current))
         if (x) { setT(x); setAll(false); setGraded(true); window.setTimeout(() => setGraded(false), 600); ctx.refresh(); bumpXp() }
       })
     }
